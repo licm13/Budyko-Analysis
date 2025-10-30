@@ -1,0 +1,175 @@
+# src/budyko/curves.py
+"""
+Budyko框架核心公式实现
+"""
+import numpy as np
+from scipy.optimize import minimize
+from typing import Tuple, Optional
+
+class BudykoCurves:
+    """Budyko曲线计算类"""
+    
+    @staticmethod
+    def tixeront_fu(aridity_index: np.ndarray, 
+                    omega: float) -> np.ndarray:
+        """
+        Tixeront-Fu参数化Budyko公式
+        
+        Parameters
+        ----------
+        aridity_index : np.ndarray
+            干旱指数 IA = EP/P
+        omega : float
+            流域参数
+            
+        Returns
+        -------
+        np.ndarray
+            蒸发指数 IE = EA/P
+            
+        References
+        ----------
+        Tixeront (1964), Fu (1981)
+        """
+        ia = np.asarray(aridity_index)
+        ie = 1 + ia - (1 + ia**omega)**(1/omega)
+        return np.clip(ie, 0, 1)  # 限制在[0,1]范围
+    
+    @staticmethod
+    def budyko_1948(aridity_index: np.ndarray) -> np.ndarray:
+        """
+        原始Budyko (1948) 非参数曲线
+        """
+        ia = np.asarray(aridity_index)
+        ie = np.sqrt(ia * np.tanh(1/ia) * (1 - np.exp(-ia)))
+        return ie
+    
+    @staticmethod
+    def fit_omega(ia_values: np.ndarray,
+                  ie_values: np.ndarray,
+                  initial_omega: float = 2.6) -> Tuple[float, dict]:
+        """
+        拟合流域特定的ω参数
+        
+        Parameters
+        ----------
+        ia_values : np.ndarray
+            观测的干旱指数序列（如20年年度值）
+        ie_values : np.ndarray
+            观测的蒸发指数序列
+        initial_omega : float
+            初始猜测值
+            
+        Returns
+        -------
+        omega_opt : float
+            最优ω参数
+        result : dict
+            拟合结果统计
+        """
+        def objective(omega):
+            ie_pred = BudykoCurves.tixeront_fu(ia_values, omega[0])
+            residuals = ie_values - ie_pred
+            return np.sum(residuals**2)
+        
+        # 优化
+        res = minimize(objective, 
+                      x0=[initial_omega],
+                      bounds=[(0.1, 10.0)],
+                      method='L-BFGS-B')
+        
+        omega_opt = res.x[0]
+        
+        # 计算统计指标
+        ie_pred = BudykoCurves.tixeront_fu(ia_values, omega_opt)
+        residuals = ie_values - ie_pred
+        
+        result = {
+            'omega': omega_opt,
+            'rmse': np.sqrt(np.mean(residuals**2)),
+            'mae': np.mean(np.abs(residuals)),
+            'r2': 1 - np.sum(residuals**2) / np.sum((ie_values - np.mean(ie_values))**2),
+            'n_points': len(ia_values)
+        }
+        
+        return omega_opt, result
+
+
+class PotentialEvaporation:
+    """势蒸发计算"""
+    
+    @staticmethod
+    def hargreaves_samani(temp_avg: np.ndarray,
+                         temp_max: np.ndarray,
+                         temp_min: np.ndarray,
+                         extraterrestrial_rad: np.ndarray,
+                         alpha: float = 0.0023) -> np.ndarray:
+        """
+        Hargreaves-Samani势蒸发公式
+        
+        Parameters
+        ----------
+        temp_avg : np.ndarray
+            日均温度 [°C]
+        temp_max : np.ndarray
+            日最高温度 [°C]
+        temp_min : np.ndarray
+            日最低温度 [°C]
+        extraterrestrial_rad : np.ndarray
+            大气顶辐射 [MJ m-2 d-1]
+        alpha : float
+            转换系数 (MJ m-2 d-1 to mm d-1)
+            
+        Returns
+        -------
+        np.ndarray
+            势蒸发 [mm/d]
+            
+        References
+        ----------
+        Hargreaves and Samani (1982)
+        """
+        ep = alpha * extraterrestrial_rad * (temp_avg + 17.8) * \
+             np.sqrt(temp_max - temp_min)
+        return np.maximum(ep, 0)  # 确保非负
+    
+    @staticmethod
+    def calculate_ra(latitude: float, 
+                     day_of_year: np.ndarray) -> np.ndarray:
+        """
+        计算大气顶辐射Ra
+        
+        Parameters
+        ----------
+        latitude : float
+            纬度 [度]
+        day_of_year : np.ndarray
+            年积日
+            
+        Returns
+        -------
+        np.ndarray
+            Ra [MJ m-2 d-1]
+            
+        References
+        ----------
+        Duffie and Beckman (1980)
+        """
+        lat_rad = np.radians(latitude)
+        
+        # 太阳赤纬
+        declination = 0.409 * np.sin(2 * np.pi * day_of_year / 365 - 1.39)
+        
+        # 日地距离倒数的平方
+        dr = 1 + 0.033 * np.cos(2 * np.pi * day_of_year / 365)
+        
+        # 日落时角
+        ws = np.arccos(-np.tan(lat_rad) * np.tan(declination))
+        
+        # 大气顶辐射
+        gsc = 0.0820  # 太阳常数 [MJ m-2 min-1]
+        ra = (24 * 60 / np.pi) * gsc * dr * \
+             (ws * np.sin(lat_rad) * np.sin(declination) + 
+              np.cos(lat_rad) * np.cos(declination) * np.sin(ws))
+        
+        return ra
