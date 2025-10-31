@@ -20,7 +20,11 @@
 """
 
 import sys
+import os
 sys.path.append('../src')
+# Get the absolute path to the parent directory
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
 
 import numpy as np
 import pandas as pd
