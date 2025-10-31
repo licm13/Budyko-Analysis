@@ -5,7 +5,8 @@
 Jaramillo et al. (2022)强调PET方法选择对结果的重大影响
 """
 import numpy as np
-from typing import Dict, Optional
+import pandas as pd
+from typing import Dict, Optional, List
 from abc import ABC, abstractmethod
 
 class PETModel(ABC):
@@ -133,7 +134,7 @@ class PenmanMonteith(PETModel):
         return np.maximum(et0, 0)
 
 
-class Priestley Taylor(PETModel):
+class PriestleyTaylor(PETModel):
     """
     Priestley-Taylor方法
     
@@ -178,6 +179,89 @@ class Priestley Taylor(PETModel):
         pet = alpha * (delta / (delta + gamma)) * (Rn - G) / lambda_heat
         return np.maximum(pet, 0)
 
+
+# FAO-56 Penman–Monteith helpers
+def _svp(T):
+    # saturation vapor pressure (kPa)
+    return 0.6108 * np.exp((17.27 * T) / (T + 237.3))
+
+def _slope_vp_curve(T):
+    es = _svp(T)
+    return 4098.0 * es / np.power(T + 237.3, 2)  # kPa/°C
+
+def _psychrometric_const(elevation_m):
+    # atmospheric pressure (kPa)
+    P = 101.3 * np.power((293.0 - 0.0065 * elevation_m) / 293.0, 5.26)
+    return 0.000665 * P  # kPa/°C
+
+def _extraterrestrial_radiation(day_of_year, latitude_deg):
+    # Ra (MJ m-2 day-1)
+    phi = np.deg2rad(latitude_deg)
+    J = np.asarray(day_of_year, dtype=float)
+    dr = 1.0 + 0.033 * np.cos(2.0 * np.pi * J / 365.0)
+    delta = 0.409 * np.sin(2.0 * np.pi * J / 365.0 - 1.39)
+    omega_s = np.arccos(-np.tan(phi) * np.tan(delta))
+    Gsc = 0.0820  # MJ m-2 min-1
+    Ra = (24.0 * 60.0 / np.pi) * Gsc * dr * (
+        omega_s * np.sin(phi) * np.sin(delta) + np.cos(phi) * np.cos(delta) * np.sin(omega_s)
+    )
+    return Ra
+
+class PenmanMonteithPET:
+    """
+    FAO-56 Penman–Monteith reference ET0 (mm/day).
+    Expects daily-scale inputs; for annual series, pass arrays of equal length.
+    """
+    def __init__(self, albedo: float = 0.23):
+        self.albedo = float(albedo)
+
+    def calculate(self,
+                  temp_avg,
+                  temp_max,
+                  temp_min,
+                  rh_mean,
+                  wind_speed,
+                  solar_radiation,  # Rs (MJ m-2 day-1)
+                  latitude,
+                  elevation,
+                  day_of_year):
+        # to arrays
+        T = np.asarray(temp_avg, dtype=float)
+        Tmax = np.asarray(temp_max, dtype=float)
+        Tmin = np.asarray(temp_min, dtype=float)
+        RH = np.clip(np.asarray(rh_mean, dtype=float), 1.0, 100.0)
+        u2 = np.maximum(np.asarray(wind_speed, dtype=float), 0.0)
+        Rs = np.maximum(np.asarray(solar_radiation, dtype=float), 0.0)
+        lat = float(latitude)
+        elev = float(elevation)
+        J = np.asarray(day_of_year, dtype=float)
+        n = T.size if T.ndim else 1
+        if np.ndim(J) == 0:
+            J = np.full(n, J, dtype=float)
+
+        # radiation terms
+        Ra = _extraterrestrial_radiation(J, lat)  # MJ m-2 day-1
+        Rso = (0.75 + 2e-5 * elev) * Ra  # clear-sky radiation
+        Rns = (1.0 - self.albedo) * Rs
+        sigma = 4.903e-9  # MJ K-4 m-2 day-1
+        Tk4_mean = (np.power(Tmax + 273.16, 4) + np.power(Tmin + 273.16, 4)) / 2.0
+        # cloudiness factor
+        f_cloud = np.clip(np.divide(Rs, Rso, out=np.ones_like(Rs), where=Rso > 0), 0.0, 1.0)
+        ea = _svp(T) * (RH / 100.0)  # kPa
+        Rnl = sigma * Tk4_mean * (0.34 - 0.14 * np.sqrt(np.maximum(ea, 0.0))) * (1.35 * f_cloud - 0.35)
+        Rnl = np.maximum(Rnl, 0.0)
+        Rn = np.maximum(Rns - Rnl, 0.0)  # MJ m-2 day-1
+
+        # PM equation
+        delta = _slope_vp_curve(T)
+        gamma = _psychrometric_const(elev)
+        es = _svp(T)
+        G = 0.0  # daily-scale soil heat flux ~ 0
+        num = 0.408 * delta * (Rn - G) + gamma * (900.0 / (T + 273.0)) * u2 * (es - ea)
+        den = delta + gamma * (1.0 + 0.34 * u2)
+        et0 = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
+        et0 = np.nan_to_num(np.maximum(et0, 0.0), nan=0.0, posinf=0.0, neginf=0.0)
+        return et0
 
 class PETModelFactory:
     """PET模型工厂"""

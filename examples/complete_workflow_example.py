@@ -19,18 +19,19 @@
 注意：本示例使用模拟数据。使用真实数据时，请替换数据加载部分。
 """
 
+from pathlib import Path
 import sys
-import os
-sys.path.append('../src')
-# Get the absolute path to the parent directory
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
+
+# Ensure <repo_root>/src is importable regardless of CWD
+repo_root = Path(__file__).resolve().parents[1]
+src_path = repo_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 
 # 导入核心模块
 from budyko.water_balance import WaterBalanceCalculator, RunoffAnalyzer

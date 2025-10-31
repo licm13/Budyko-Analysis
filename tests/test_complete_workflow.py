@@ -6,9 +6,6 @@
 测试整个Budyko分析流程是否能正常运行
 """
 
-import sys
-sys.path.append('../src')
-
 import numpy as np
 import pytest
 

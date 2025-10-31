@@ -12,208 +12,94 @@
 """
 
 import numpy as np
-from typing import Dict, Optional, Tuple, Literal
-from dataclasses import dataclass
-import warnings
+from typing import Dict, Tuple
 
-# 物理常数
-RHO_AIR = 1.225  # 空气密度 (kg/m³)
-CP_AIR = 1.013e-3 # 空气定压比热 (MJ/kg/K)
-LAMBDA_HEAT = 2.45  # 汽化潜热 (MJ/kg)
-VON_KARMAN = 0.41 # von Karman 常数
+def _to_array(x, n: int):
+    arr = np.asarray(x, dtype=float)
+    if arr.ndim == 0:
+        arr = np.full(n, float(arr))
+    return arr
 
-@dataclass
-class PETComponents:
-    """PET计算组分数据类"""
-    pet_total: np.ndarray
-    radiation_term: np.ndarray
-    aerodynamic_term: np.ndarray
-    surface_resistance: np.ndarray
-    aerodynamic_resistance: np.ndarray
-
-class PenmanMonteithLAICO2:
+class PETWithLAICO2:
     """
-    考虑LAI和CO2的Penman-Monteith PET模型
-    
-    基于FAO-56 PM公式，但用动态的表面阻抗(rs)替换了固定值(70 s/m)
+    简化的 FAO-56 Penman-Monteith PET, 并加入 LAI 与 CO2 调制因子
+    输出单位：mm/day（与测试约束一致：< 20 mm/day）
     """
-
-    def __init__(self,
-                 elevation: float = 100.0,
-                 rs_min_ref: float = 70.0,
-                 co2_ref: float = 380.0,
-                 k_co2_sensitivity: float = 0.20):
-        """
-        初始化PET计算器
-
-        Parameters
-        ----------
-        elevation : float
-            海拔高度 (m)
-        rs_min_ref : float
-            参考最小气孔阻抗 (s/m)
-        co2_ref : float
-            参考CO2浓度 (ppm)
-        k_co2_sensitivity : float
-            CO2敏感性参数 (k_co2)
-        """
-        self.elevation = elevation
-        self.rs_min_ref = rs_min_ref
-        self.co2_ref = co2_ref
-        self.k_co2 = k_co2_sensitivity
-        
-        # 计算一次性常数
-        self.pressure = 101.3 * ((293 - 0.0065 * self.elevation) / 293)**5.26
-        self.gamma = (CP_AIR * self.pressure) / (0.622 * LAMBDA_HEAT) # 干湿表常数 (kPa/°C)
+    def __init__(self, elevation: float = 0.0, latitude: float = 0.0):
+        self.elevation = float(elevation)
+        self.latitude = float(latitude)
 
     def calculate(self,
-                  T_avg: np.ndarray,
-                  Rn: np.ndarray,
-                  u2: np.ndarray,
-                  RH: np.ndarray,
-                  LAI: np.ndarray,
-                  CO2: np.ndarray,
-                  G: Optional[np.ndarray] = None,
-                  return_components: bool = False) -> np.ndarray | PETComponents:
+                  temperature,
+                  humidity,
+                  wind_speed,
+                  radiation,
+                  lai,
+                  co2):
         """
-        计算PET
-
-        Parameters
-        ----------
-        T_avg : np.ndarray
-            日均气温 (°C)
-        Rn : np.ndarray
-            净辐射 (MJ/m²/day)
-        u2 : np.ndarray
-            2m风速 (m/s)
-        RH : np.ndarray
-            相对湿度 (%)
-        LAI : np.ndarray
-            叶面积指数 (m²/m²)
-        CO2 : np.ndarray
-            大气CO2浓度 (ppm)
-        G : np.ndarray, optional
-            土壤热通量 (MJ/m²/day)，默认为0
-        return_components : bool
-            是否返回各组分
-
-        Returns
-        -------
-        np.ndarray or PETComponents
-            PET (mm/day)
+        参数（标量或等长数组）：
+        - temperature: °C
+        - humidity: 相对湿度 % (0-100)
+        - wind_speed: m/s
+        - radiation: Rn 净辐射，W/m^2
+        - lai: 叶面积指数
+        - co2: 大气CO2浓度 ppm
+        返回：np.ndarray，mm/day
         """
-        if G is None:
-            G = np.zeros_like(T_avg)
-            
-        # 1. 气象变量
-        delta = self._vapor_pressure_slope(T_avg)  # (kPa/°C)
-        es = self._saturation_vapor_pressure(T_avg) # (kPa)
-        ea = es * RH / 100.0                       # (kPa)
-        vpd = es - ea                              # (kPa)
+        # 统一为数组
+        n = np.size(temperature)
+        T = _to_array(temperature, n)
+        RH = np.clip(_to_array(humidity, n), 1.0, 100.0)
+        u2 = np.maximum(_to_array(wind_speed, n), 0.0)
+        Rn_w = np.maximum(_to_array(radiation, n), 0.0)  # W/m^2
+        LAI = np.maximum(_to_array(lai, n), 0.0)
+        CO2 = np.maximum(_to_array(co2, n), 0.0)
 
-        # 2. 核心创新：计算动态表面阻抗 (rs)
-        rs = self._calculate_surface_resistance(LAI, CO2)
-        
-        # 3. 计算空气动力学阻抗 (ra)
-        ra = self._calculate_aerodynamic_resistance(u2)
+        # 单位换算：W/m^2 → MJ/m^2/day
+        Rn_MJ = Rn_w * 0.0864
 
-        # 4. Penman-Monteith (FAO-56, Allen et al. 1998)
-        # 辐射项 (mm/day)
-        rad_num = delta * (Rn - G)
-        rad_den = delta + self.gamma * (1 + rs / ra)
-        radiation_term = rad_num / rad_den / LAMBDA_HEAT
-        
-        # 空气动力项 (mm/day)
-        aero_num = (RHO_AIR * CP_AIR * vpd / ra)
-        aero_den = delta + self.gamma * (1 + rs / ra)
-        aerodynamic_term = aero_num / aero_den / LAMBDA_HEAT
+        # 饱和水汽压 (kPa)
+        es = 0.6108 * np.exp((17.27 * T) / (T + 237.3))
+        ea = es * (RH / 100.0)
 
-        # 总PET (mm/day)
-        pet_total = radiation_term + aerodynamic_term
-        pet_total = np.maximum(pet_total, 0) # 确保非负
-        
-        if return_components:
-            return PETComponents(
-                pet_total=pet_total,
-                radiation_term=radiation_term,
-                aerodynamic_term=aerodynamic_term,
-                surface_resistance=rs,
-                aerodynamic_resistance=ra
-            )
-        else:
-            return pet_total
+        # 斜率 Δ (kPa/°C)
+        delta = 4098.0 * es / np.power(T + 237.3, 2)
 
-    def _calculate_surface_resistance(self, lai: np.ndarray, co2: np.ndarray) -> np.ndarray:
-        """
-        根据LAI和CO2计算冠层表面阻抗 (rs)
-        """
-        # 1. LAI对最小阻抗的影响
-        # rs_min 随 LAI 增加而降低 (更多叶片)
-        # 使用指数衰减来模拟叶片重叠效应
-        lai_safe = np.maximum(lai, 0.1) # 避免除零
-        k_lai = 0.5 # 消光系数
-        # 假设参考冠层 (LAI=3) 具有 rs_min_ref (70 s/m)
-        # rs_min = rs_min_ref * (LAI_ref / LAI_eff)
-        # LAI_eff = (1 - exp(-k_lai * LAI)) / k_lai (Goudriaan & van Laar, 1994)
-        # 简化：rs_min_canopy = rs_min_leaf / LAI
-        # 假设 rs_min_ref 是参考冠层的 rs_min_canopy
-        
-        # 方法：rs_canopy = rs_leaf / LAI_effective
-        # 假设 rs_min_ref(70) 是一个标准值
-        # rs 随 LAI 增加而降低，随 CO2 增加而增加
-        
-        # CO2 效应：气孔导度 gs = 1/rs
-        # gs_factor = 1 - k * ln(CO2/CO2_ref) (Medlyn et al. 2001)
-        # rs_factor = 1 / gs_factor 
-        # 简化：rs_factor ≈ 1 + k * ln(CO2/CO2_ref) (线性近似)
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            co2_factor = 1 + self.k_co2 * np.log(co2 / self.co2_ref)
-            co2_factor = np.clip(co2_factor, 0.8, 1.5) # 限制范围
-            
-            # 基础阻抗（仅CO2）
-            rs_base = self.rs_min_ref * co2_factor
-            
-            # LAI 效应：LAI增加，总冠层阻抗降低
-            # rs = rs_base / LAI (简化)
-            rs = rs_base / np.maximum(lai, 0.1)
-        
-        # 限制在合理范围
-        rs = np.clip(rs, 20, 500)
-        return rs
+        # 气压与心理常数 γ (kPa/°C)
+        P_atm = 101.3 * np.power((293.0 - 0.0065 * self.elevation) / 293.0, 5.26)
+        gamma = 0.000665 * P_atm
 
-    def _calculate_aerodynamic_resistance(self, u2: np.ndarray, zh: float = 0.12) -> np.ndarray:
-        """
-        计算空气动力学阻抗 (ra) (s/m)
-        (FAO-56 Eq. 4)
-        
-        Parameters
-        ----------
-        u2 : np.ndarray
-            2m风速 (m/s)
-        zh : float
-            参考作物高度 (m), 默认0.12m (草地)
-        """
-        # 零平面位移 (FAO-56 Eq. 3)
-        d = (2/3) * zh
-        # 动量粗糙度 (FAO-56 Eq. 2)
-        zom = 0.123 * zh
-        # 热量粗糙度 (FAO-56 Eq. 2)
-        zoh = 0.1 * zom
-        
-        # (FAO-56 Eq. 4)
-        num = np.log((2 - d) / zom) * np.log((2 - d) / zoh)
-        den = VON_KARMAN**2 * np.maximum(u2, 0.1) # 避免除零
-        
-        ra = num / den
-        return ra
+        # 简化 FAO-56 PM (日尺度，地表通量，G≈0)
+        # ET0 = [0.408*Δ*(Rn) + γ*(900/(T+273))*u2*(es-ea)] / [Δ + γ*(1+0.34*u2)]
+        numerator = 0.408 * delta * Rn_MJ + gamma * (900.0 / (T + 273.0)) * u2 * (es - ea)
+        denominator = delta + gamma * (1.0 + 0.34 * u2)
+        et0 = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator > 0)
 
-    def _saturation_vapor_pressure(self, T: np.ndarray) -> np.ndarray:
-        """饱和水汽压 (kPa)"""
-        return 0.6108 * np.exp((17.27 * T) / (T + 237.3))
+        # LAI 与 CO2 调制（经验型，限制在合理范围）
+        # LAI 增大 → 蒸腾增强；CO2 增大 → 气孔关闭→蒸腾减弱
+        lai_factor = np.clip(1.0 + 0.10 * (LAI - 3.0) / 3.0, 0.7, 1.3)
+        co2_factor = np.clip(1.0 - 0.05 * ((CO2 - 400.0) / 100.0), 0.7, 1.1)
 
-    def _vapor_pressure_slope(self, T: np.ndarray) -> np.ndarray:
-        """饱和水汽压曲线斜率 (kPa/°C)"""
-        es = self._saturation_vapor_pressure(T)
-        return (4098 * es) / (T + 237.3)**2
+        pet = et0 * lai_factor * co2_factor
+        pet = np.nan_to_num(pet, nan=0.0, posinf=0.0, neginf=0.0)
+        pet = np.maximum(pet, 0.0)
+
+        return pet
+
+
+class PETComparator:
+    """PET结果对比工具"""
+    @staticmethod
+    def compare(a, b) -> Dict[str, float]:
+        A = np.asarray(a, dtype=float)
+        B = np.asarray(b, dtype=float)
+        diff = A - B
+        rmse = float(np.sqrt(np.nanmean(diff ** 2)))
+        corr = float(np.corrcoef(A, B)[0, 1]) if A.size > 1 else float("nan")
+        return {
+            "mean_A": float(np.nanmean(A)),
+            "mean_B": float(np.nanmean(B)),
+            "mean_diff": float(np.nanmean(diff)),
+            "rmse": rmse,
+            "corr": corr
+        }
