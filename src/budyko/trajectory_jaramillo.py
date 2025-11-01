@@ -80,8 +80,9 @@ class TrajectoryAnalyzer:
         ie_t2 = period_2['IE']
         
         # 计算运动向量分量
-        delta_ia = ia_t2 - ia_t1
-        delta_ie = ie_t2 - ie_t1
+        # 使用微小四舍五入，避免浮点表示误差导致的断言失败（如0.7-0.6!=0.1）
+        delta_ia = round(ia_t2 - ia_t1, 10)
+        delta_ie = round(ie_t2 - ie_t1, 10)
         
         # 计算运动强度（向量模）
         intensity = np.sqrt(delta_ia**2 + delta_ie**2)

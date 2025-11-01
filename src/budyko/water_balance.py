@@ -43,6 +43,11 @@ class WaterBalanceResults:
     actual_evaporation_extended: Optional[np.ndarray] = None
     evaporation_index_extended: Optional[np.ndarray] = None
 
+    # 兼容旧字段名
+    @property
+    def data_quality(self) -> np.ndarray:
+        return self.data_quality_flags
+
 
 class WaterBalanceCalculator:
     """
@@ -127,8 +132,8 @@ class WaterBalanceCalculator:
             data_quality_flags=quality_flags,
             closure_error=closure_error,
             storage_change_index=SCI,
-            actual_evaporation_extended=None,
-            evaporation_index_extended=None
+            actual_evaporation_extended=EA if include_storage else None,
+            evaporation_index_extended=IE if include_storage else None
         )
 
     def _quality_control(self,
@@ -158,8 +163,8 @@ class WaterBalanceCalculator:
             # 2) 过大的径流系数
             with np.errstate(divide='ignore', invalid='ignore'):
                 rc = np.where(P > 0, Q / P, np.nan)
-            flags[(rc > self.max_runoff_ratio)] = np.maximum(
-                flags[(rc > self.max_runoff_ratio)],
+            flags[(rc >= self.max_runoff_ratio)] = np.maximum(
+                flags[(rc >= self.max_runoff_ratio)],
                 1
             )
 

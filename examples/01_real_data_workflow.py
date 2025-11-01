@@ -546,9 +546,11 @@ def main():
 
     plt.tight_layout()
 
-    # 保存图表
-    output_path = Path('output') / 'comprehensive_analysis.png'
-    output_path.parent.mkdir(exist_ok=True)
+    # 保存图表到脚本所在目录的 figures 文件夹，文件名带脚本名
+    figures_dir = Path(__file__).resolve().parent / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    script_stem = Path(__file__).stem
+    output_path = figures_dir / f"{script_stem}__comprehensive_analysis.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"✓ 综合图表已保存: {output_path}")
 

@@ -32,9 +32,16 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from scipy import stats
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler
+try:  # optional dependency for ML features
+    from sklearn.preprocessing import StandardScaler  # type: ignore
+except Exception:  # pragma: no cover - allow import without sklearn
+    class StandardScaler:  # minimal fallback
+        def fit(self, X):
+            return self
+        def fit_transform(self, X):
+            return np.asarray(X, dtype=float)
+        def transform(self, X):
+            return np.asarray(X, dtype=float)
 import warnings
 
 
@@ -61,6 +68,77 @@ class DeviationAttributor:
         self.drivers = {}
         self.deviation = None
         self.scaler = StandardScaler()
+        # for direct fit/predict workflow
+        self._rf_model = None
+        self._driver_names: List[str] = []
+
+    # ------------------------------------------------------------------
+    # Simple ML API used by examples: fit / predict / feature importance
+    # ------------------------------------------------------------------
+    def fit(self, X: np.ndarray, y: np.ndarray, driver_names: List[str],
+            n_estimators: int = 200, max_depth: Optional[int] = None, random_state: int = 42) -> None:
+        """Fit a RandomForest model on provided features and targets.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            Feature matrix (n_samples, n_features)
+        y : np.ndarray
+            Target vector (n_samples,)
+        driver_names : List[str]
+            Names corresponding to columns of X
+        n_estimators : int
+            Number of trees
+        max_depth : Optional[int]
+            Max tree depth (None means unconstrained)
+        random_state : int
+            Random seed for reproducibility
+        """
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float).ravel()
+        self._driver_names = list(driver_names)
+        Xs = self.scaler.fit_transform(X)
+
+        try:
+            from sklearn.ensemble import RandomForestRegressor  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError("scikit-learn is required for fit/predict; please install scikit-learn") from e
+
+        self._rf_model = RandomForestRegressor(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            random_state=random_state
+        )
+        self._rf_model.fit(Xs, y)
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Predict targets using the previously fit model."""
+        if self._rf_model is None:
+            raise RuntimeError("Model not fit. Call fit(X, y, driver_names) first.")
+        X = np.asarray(X, dtype=float)
+        Xs = self.scaler.transform(X)
+        return self._rf_model.predict(Xs)
+
+    def get_feature_importance(self) -> Dict[str, float]:
+        """Return feature importances keyed by driver name (normalized to sum to 1)."""
+        if self._rf_model is None:
+            raise RuntimeError("Model not fit. Call fit(X, y, driver_names) first.")
+        importances = self._rf_model.feature_importances_
+        total = float(importances.sum()) or 1.0
+        return {name: float(val) / total for name, val in zip(self._driver_names, importances)}
+
+    @staticmethod
+    def evaluate(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+        """Compute simple regression metrics: R^2 and RMSE."""
+        y_true = np.asarray(y_true, dtype=float).ravel()
+        y_pred = np.asarray(y_pred, dtype=float).ravel()
+        # R^2
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2) or 1.0
+        r2 = 1.0 - ss_res / ss_tot
+        # RMSE
+        rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
+        return {"r2": float(max(r2, 0.0)), "rmse": rmse}
 
     def set_deviation(self, deviation: np.ndarray):
         """
@@ -182,6 +260,10 @@ class DeviationAttributor:
         X, y, valid_mask = self._prepare_data(drivers)
 
         # 训练模型
+        try:
+            from sklearn.linear_model import LinearRegression  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError("scikit-learn is required for linear_regression_attribution") from e
         model = LinearRegression()
         model.fit(X, y)
 
@@ -244,30 +326,58 @@ class DeviationAttributor:
         X, y, valid_mask = self._prepare_data(drivers)
 
         # 训练模型
-        model = RandomForestRegressor(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            random_state=42
-        )
-        model.fit(X, y)
+        try:
+            from sklearn.ensemble import RandomForestRegressor  # type: ignore
+            model = RandomForestRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                random_state=42
+            )
+            model.fit(X, y)
 
-        # 预测
-        y_pred = model.predict(X)
-        residuals = y - y_pred
+            # 预测
+            y_pred = model.predict(X)
+            residuals = y - y_pred
 
-        # 解释方差
-        explained_var = model.score(X, y)
+            # 解释方差
+            explained_var = model.score(X, y)
 
-        # 驱动因子重要性
-        importance = {}
-        for i, driver_name in enumerate(drivers):
-            importance[driver_name] = model.feature_importances_[i]
+            # 驱动因子重要性
+            importance = {drivers[i]: float(model.feature_importances_[i]) for i in range(len(drivers))}
 
-        # 计算SHAP值（简化版）- 实际使用可考虑shap库
-        contributions = {}
-        for i, driver_name in enumerate(drivers):
-            # 简化：使用特征重要性 * 特征值作为近似贡献
-            contributions[driver_name] = model.feature_importances_[i] * X[:, i]
+            # 贡献（简化）
+            contributions = {drivers[i]: float(model.feature_importances_[i]) * X[:, i] for i in range(len(drivers))}
+        except Exception:
+            # Fallback without scikit-learn: use simple quadratic regression as proxy
+            # Build polynomial features per driver: [x, x^2]
+            feat_blocks = []
+            block_slices = []
+            start = 0
+            for i in range(len(drivers)):
+                xi = X[:, i]
+                block = np.column_stack([xi, xi * xi])
+                feat_blocks.append(block)
+                block_slices.append(slice(start, start + 2))
+                start += 2
+            Phi = np.column_stack(feat_blocks)  # (n, 2*D)
+            # Solve least squares
+            beta, *_ = np.linalg.lstsq(Phi, y, rcond=None)
+            y_pred = Phi @ beta
+            residuals = y - y_pred
+            ss_res = float(np.sum(residuals**2))
+            ss_tot = float(np.sum((y - np.mean(y))**2)) or 1.0
+            explained_var = max(1.0 - ss_res / ss_tot, 0.0)
+            # Importance: sum of abs coefs for each driver's terms
+            raw_importance = []
+            for sl in block_slices:
+                raw_importance.append(float(np.sum(np.abs(beta[sl]))))
+            total = sum(raw_importance) or 1.0
+            importance = {drv: val / total for drv, val in zip(drivers, raw_importance)}
+            # Contributions per driver
+            contributions = {}
+            for drv, sl in zip(drivers, block_slices):
+                contrib = Phi[:, sl] @ beta[sl]
+                contributions[drv] = contrib
 
         return AttributionResults(
             method='random_forest',

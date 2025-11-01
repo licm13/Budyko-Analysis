@@ -225,19 +225,19 @@ class PenmanMonteithPET:
                   latitude,
                   elevation,
                   day_of_year):
-        # to arrays
-        T = np.asarray(temp_avg, dtype=float)
-        Tmax = np.asarray(temp_max, dtype=float)
-        Tmin = np.asarray(temp_min, dtype=float)
-        RH = np.clip(np.asarray(rh_mean, dtype=float), 1.0, 100.0)
-        u2 = np.maximum(np.asarray(wind_speed, dtype=float), 0.0)
-        Rs = np.maximum(np.asarray(solar_radiation, dtype=float), 0.0)
+        # to arrays (robust to scalar inputs)
+        T = np.atleast_1d(np.asarray(temp_avg, dtype=float))
+        Tmax = np.atleast_1d(np.asarray(temp_max, dtype=float))
+        Tmin = np.atleast_1d(np.asarray(temp_min, dtype=float))
+        RH = np.clip(np.atleast_1d(np.asarray(rh_mean, dtype=float)), 1.0, 100.0)
+        u2 = np.maximum(np.atleast_1d(np.asarray(wind_speed, dtype=float)), 0.0)
+        Rs = np.maximum(np.atleast_1d(np.asarray(solar_radiation, dtype=float)), 0.0)
         lat = float(latitude)
         elev = float(elevation)
-        J = np.asarray(day_of_year, dtype=float)
-        n = T.size if T.ndim else 1
-        if np.ndim(J) == 0:
-            J = np.full(n, J, dtype=float)
+        J = np.atleast_1d(np.asarray(day_of_year, dtype=float))
+        n = T.size
+        if J.size == 1:
+            J = np.full(n, J.item(), dtype=float)
 
         # radiation terms
         Ra = _extraterrestrial_radiation(J, lat)  # MJ m-2 day-1
@@ -261,7 +261,8 @@ class PenmanMonteithPET:
         den = delta + gamma * (1.0 + 0.34 * u2)
         et0 = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
         et0 = np.nan_to_num(np.maximum(et0, 0.0), nan=0.0, posinf=0.0, neginf=0.0)
-        return et0
+        # return scalar if scalar inputs were provided
+        return float(et0[0]) if n == 1 else et0
 
 class PETModelFactory:
     """PET模型工厂"""

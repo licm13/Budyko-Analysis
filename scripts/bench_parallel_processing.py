@@ -1,4 +1,4 @@
-"""Baseline benchmark for :mod:`src.utils.parallel_processing`.
+"""Baseline benchmark for :mod:`utils.parallel_processing`.
 
 Run the script directly to obtain timing information for sequential versus
 parallel execution paths.  The benchmark intentionally keeps the dataset
@@ -11,8 +11,16 @@ import argparse
 import time
 from typing import Dict, List
 
+# Make repo's src/ importable when running this script directly
+import sys
+from pathlib import Path
+repo_root = Path(__file__).resolve().parents[1]
+src_path = repo_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
 import random
-from src.utils.parallel_processing import ParallelBudykoAnalyzer
+from utils.parallel_processing import ParallelBudykoAnalyzer
 
 
 def _build_fake_dataset(size: int, seed: int = 42) -> List[str]:

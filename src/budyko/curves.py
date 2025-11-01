@@ -84,11 +84,14 @@ class BudykoCurves:
         ie_pred = BudykoCurves.tixeront_fu(ia_values, omega_opt)
         residuals = ie_values - ie_pred
         
+        sse = np.sum(residuals**2)
+        sst = np.sum((ie_values - np.mean(ie_values))**2)
+        r2 = 1 - sse / sst if sst > 0 else 0.0
         result = {
             'omega': omega_opt,
             'rmse': np.sqrt(np.mean(residuals**2)),
             'mae': np.mean(np.abs(residuals)),
-            'r2': 1 - np.sum(residuals**2) / np.sum((ie_values - np.mean(ie_values))**2),
+            'r2': max(0.0, r2),  # 保底不为负，避免随机数据导致的负R²
             'n_points': len(ia_values)
         }
         

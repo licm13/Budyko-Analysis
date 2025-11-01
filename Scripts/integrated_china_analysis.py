@@ -10,16 +10,21 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from typing import Dict
 
 # 添加src到路径
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from budyko.curves import BudykoCurves
-from budyko.deviation_ibrahim import DeviationAnalysis, TemporalStability
+from budyko.deviation import DeviationAnalysis, TemporalStability
 from budyko.trajectory_jaramillo import TrajectoryAnalyzer, ScenarioComparator
 from data_processing.cmip6_processor import CMIP6Processor
 from utils.parallel_processing import ParallelBudykoAnalyzer
-from visualization.china_maps import ChinaMapVisualizer
+try:
+    # Optional: only if a China map visualizer exists in your environment
+    from visualization.china_maps import ChinaMapVisualizer  # type: ignore
+except Exception:
+    ChinaMapVisualizer = None  # not required for core analysis
 
 
 class IntegratedChinaAnalysis:
@@ -59,6 +64,13 @@ class IntegratedChinaAnalysis:
         print("STEP 1: Historical Deviation Analysis (Ibrahim et al. 2025)")
         print("="*60)
         
+        # Graceful no-op when data is missing
+        required_cols = {'catchment_id', 'IA_annual_T1', 'IE_annual_T1', 'omega_T1', 'IA_annual_T2', 'IE_annual_T2'}
+        if catchments_data is None or catchments_data.empty or not required_cols.issubset(set(catchments_data.columns)):
+            print("  No sufficient catchment data available; skipping Step 1.")
+            self.results['historical'] = pd.DataFrame()
+            return self.results['historical']
+
         deviation_analyzer = DeviationAnalysis(period_length=20)
         stability_analyzer = TemporalStability()
         
@@ -133,12 +145,27 @@ class IntegratedChinaAnalysis:
         print("STEP 2: Future Trajectory Analysis (Jaramillo et al. 2022)")
         print("="*60)
         
+        # Graceful no-op when CMIP6 data is missing
+        scenarios = self.config.get('scenarios', ['ssp126', 'ssp585'])
+        if not cmip6_data or not all(s in cmip6_data for s in scenarios):
+            print("  No CMIP6 data available; skipping Step 2.")
+            self.results['future'] = {}
+            self.results['scenario_comparison'] = pd.DataFrame()
+            return {}, pd.DataFrame()
+
         scenario_results = {}
         
-        for scenario in ['ssp126', 'ssp585']:
+        for scenario in scenarios:
             print(f"\n  Analyzing scenario: {scenario}")
             
             data = cmip6_data[scenario]
+            if data is None or data.empty:
+                print(f"    No data for {scenario}; skipping.")
+                continue
+            needed = {'catchment_id', 'IA_historical', 'IE_historical', f'IA_{scenario}', f'IE_{scenario}'}
+            if not needed.issubset(set(data.columns)):
+                print(f"    Missing required columns for {scenario}: {sorted(needed - set(data.columns))}; skipping.")
+                continue
             
             # 并行轨迹分析
             parallel_analyzer = ParallelBudykoAnalyzer(n_processes=8)
@@ -159,7 +186,7 @@ class IntegratedChinaAnalysis:
             scenario_results[scenario] = trajectory_results
         
         # 情景比较
-        comparator = ScenarioComparator(scenarios=['ssp126', 'ssp585'])
+        comparator = ScenarioComparator(scenarios=scenarios)
         comparison = comparator.compare_following_rates(scenario_results)
         
         print(f"\n  Scenario Comparison:")
@@ -206,6 +233,7 @@ class IntegratedChinaAnalysis:
         
         # 保存
         output_path = Path(self.config['output_dir']) / 'integrated_china_analysis.png'
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         print(f"  Figure saved: {output_path}")
     

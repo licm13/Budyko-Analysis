@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import seaborn as sns
+from typing import Dict
 
 class BudykoVisualizer:
     """Budyko空间可视化类"""
@@ -25,7 +26,7 @@ class BudykoVisualizer:
         omega_reference : float
             参考ω值（如T1的ω），用于绘制预期曲线
         """
-        from ..budyko.curves import BudykoCurves
+        from budyko.curves import BudykoCurves
         
         # 绘制Budyko (1974) 非参数曲线
         ia_range = np.linspace(0, 5, 200)
@@ -41,19 +42,42 @@ class BudykoVisualizer:
         colors = plt.cm.viridis(np.linspace(0, 1, len(period_results)))
         
         # 绘制每个时段
-        for (period_name, data), color in zip(period_results.items(), colors):
+        for (period_name, pdata), color in zip(period_results.items(), colors):
+            # 兼容不同键名的数据结构
+            if 'ia_annual' in pdata and 'ie_annual' in pdata:
+                ia_ann = np.asarray(pdata['ia_annual'])
+                ie_ann = np.asarray(pdata['ie_annual'])
+            elif 'IA' in pdata and 'IE' in pdata:
+                ia_ann = np.asarray(pdata['IA'])
+                ie_ann = np.asarray(pdata['IE'])
+            elif 'data' in pdata:
+                ia_ann = np.asarray(pdata['data']['IA'].values)
+                ie_ann = np.asarray(pdata['data']['IE'].values)
+            else:
+                ia_ann = np.array([])
+                ie_ann = np.array([])
+
+            ia_mean = pdata.get('ia_mean', pdata.get('IA_mean', np.nan))
+            ie_mean = pdata.get('ie_mean', pdata.get('IE_mean', np.nan))
+            start_year = pdata.get('start_year', '')
+            end_year = pdata.get('end_year', '')
+            omega = pdata.get('omega', None)
+
             # 年度点（浅色小点）
-            ax.scatter(data['ia_annual'], data['ie_annual'],
-                      c=[color], alpha=0.3, s=20, edgecolors='none')
-            
+            if ia_ann.size and ie_ann.size:
+                ax.scatter(ia_ann, ie_ann,
+                          c=[color], alpha=0.3, s=20, edgecolors='none')
+
             # 时段平均点（深色大点）
-            ax.scatter(data['ia_mean'], data['ie_mean'],
-                      c=[color], s=100, edgecolors='k', lw=1.5,
-                      marker='o', label=f"{period_name} ({data['start_year']}-{data['end_year']})",
-                      zorder=5)
-            
+            if np.isfinite(ia_mean) and np.isfinite(ie_mean):
+                ax.scatter(ia_mean, ie_mean,
+                          c=[color], s=100, edgecolors='k', lw=1.5,
+                          marker='o', label=f"{period_name} ({start_year}-{end_year})",
+                          zorder=5)
+
             # 绘制该时段的参数曲线
-            ie_curve = BudykoCurves.tixeront_fu(ia_range, data['omega'])
+            if omega is not None:
+                ie_curve = BudykoCurves.tixeront_fu(ia_range, omega)
             ax.plot(ia_range, ie_curve, color=color, lw=1.5, alpha=0.7)
         
         # 如果提供参考ω，绘制预期轨迹

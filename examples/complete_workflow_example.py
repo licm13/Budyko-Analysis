@@ -460,8 +460,13 @@ def step6_visualization(basin_data: dict, wb_results: dict,
     ax2.legend(handles=legend_elements)
 
     plt.tight_layout()
-    plt.savefig(output_dir / 'budyko_space_analysis.png', dpi=300, bbox_inches='tight')
-    print(f"  已保存: {output_dir / 'budyko_space_analysis.png'}")
+    # Save to figures folder with script-based filename
+    figures_dir = Path(__file__).resolve().parent / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    script_stem = Path(__file__).stem
+    fig_path = figures_dir / f"{script_stem}__budyko_space_analysis.png"
+    plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    print(f"  已保存: {fig_path}")
 
     plt.close()
 

@@ -1,21 +1,24 @@
-# src/data_processing/__init__.py
-"""
-pn!W
+"""Top-level exports for the data_processing package.
 
-Ð›Aßpn<¹apnepn„ }Ÿý
+This package contains utilities for preparing basin-level inputs and
+loading auxiliary datasets (GRACE, LAI, CO2, and optionally CMIP6).
 """
 
 from .basin_processor import BasinDataProcessor
 from .grace_lai_processor import GRACEDataLoader, LAIDataLoader, CO2DataLoader
 
+# CMIP6 support may be optional depending on user environment
 try:
-    from .cmip6_processor import CMIP6Processor
-except ImportError:
-    pass  # CMIP6h:ï	
+    from .cmip6_processor import CMIP6Processor  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    CMIP6Processor = None  # type: ignore[assignment]
 
 __all__ = [
-    'BasinDataProcessor',
-    'GRACEDataLoader',
-    'LAIDataLoader',
-    'CO2DataLoader',
+    "BasinDataProcessor",
+    "GRACEDataLoader",
+    "LAIDataLoader",
+    "CO2DataLoader",
 ]
+
+if CMIP6Processor is not None:  # type: ignore[name-defined]
+    __all__.append("CMIP6Processor")

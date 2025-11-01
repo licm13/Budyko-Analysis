@@ -1,0 +1,17 @@
+Budyko Deviation Analysis Report
+============================================================
+Catchment ID: DEMO_001
+
+Period-specific parameters:
+  T1: ¦Ø=3.325, IA=0.843, IE=0.700
+  T2: ¦Ø=3.315, IA=0.859, IE=0.706
+  T3: ¦Ø=3.284, IA=0.834, IE=0.691
+  T4: ¦Ø=3.085, IA=0.849, IE=0.683
+  T5: ¦Ø=3.419, IA=0.862, IE=0.714
+
+Temporal stability: Stable
+
+Marginal distribution:
+  Median ¦ÅIE¦Ø: 0.0066
+  IQR: 0.1078
+  Predictive power: High

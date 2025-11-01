@@ -51,35 +51,25 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
+from typing import Dict, Tuple
 
-# 假设代码库结构已按建议调整
-# (如果直接运行，请确保src在PYTHONPATH中)
-try:
-    from src.budyko.water_balance import WaterBalanceCalculator, WaterBalanceResults
-    from src.budyko.curves import BudykoCurves
-    from src.budyko.deviation import DeviationAnalysis, TemporalStability, MarginalDistribution
-    from src.budyko.trajectory_jaramillo import TrajectoryAnalyzer
-    from src.models.pet.penman_monteith_lai_co2 import PenmanMonteithLAICO2
-    from src.models.pet_models import PenmanMonteith # 导入标准PM
-    from src.analysis.deviation_attribution import DeviationAttributor
-    from src.analysis.snow_analyzer import SnowImpactAnalyzer
-    from src.visualization.budyko_plots import BudykoVisualizer
-    from src.visualization.direction_rose import plot_direction_rose
-except ImportError:
-    print("未找到src模块，请确保src目录在PYTHONPATH中")
-    # 添加上级目录到路径
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sys.path.append(parent_dir)
-    from src.budyko.water_balance import WaterBalanceCalculator, WaterBalanceResults
-    from src.budyko.curves import BudykoCurves
-    from src.budyko.deviation import DeviationAnalysis, TemporalStability, MarginalDistribution
-    from src.budyko.trajectory_jaramillo import TrajectoryAnalyzer
-    from src.models.pet.penman_monteith_lai_co2 import PenmanMonteithLAICO2
-    from src.models.pet_models import PenmanMonteith
-    from src.analysis.deviation_attribution import DeviationAttributor
-    from src.analysis.snow_analyzer import SnowImpactAnalyzer
-    from src.visualization.budyko_plots import BudykoVisualizer
-    from src.visualization.direction_rose import plot_direction_rose
+# 确保可以导入 <repo_root>/src 下的包
+repo_root = Path(__file__).resolve().parents[1]
+src_path = repo_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+# 使用包名导入（而不是 src. 前缀）
+from budyko.water_balance import WaterBalanceCalculator, WaterBalanceResults
+from budyko.curves import BudykoCurves
+from budyko.deviation import DeviationAnalysis, TemporalStability, MarginalDistribution
+from budyko.trajectory_jaramillo import TrajectoryAnalyzer
+from models.pet_lai_co2 import PETWithLAICO2
+from models.pet_models import PenmanMonteith
+from analysis.deviation_attribution import DeviationAttributor
+from analysis.snow_analyzer import SnowImpactAnalyzer
+from visualization.budyko_plots import BudykoVisualizer
+from visualization.direction_rose import plot_direction_rose
 
 # --- 1. 数据模拟 ---
 def generate_complex_data(n_years: int = 60, start_year: int = 1961) -> pd.DataFrame:
@@ -118,8 +108,9 @@ def generate_complex_data(n_years: int = 60, start_year: int = 1961) -> pd.DataF
     # 5. 模拟径流 (Q)
     # 5a. 首先，计算“自然”径流 (Q_nat)
     # 使用LAI+CO2 PET计算IA
-    pet_calc = PenmanMonteithLAICO2(elevation=500, latitude=40)
-    PET_lai_co2 = pet_calc.calculate(T_avg, Rn_W, u2, RH, LAI, CO2)
+    pet_calc = PETWithLAICO2(elevation=500, latitude=40)
+    # 注意顺序：temperature, humidity, wind_speed, radiation, lai, co2
+    PET_lai_co2 = pet_calc.calculate(T_avg, RH, u2, Rn_W, LAI, CO2)
     PET_lai_co2_annual = PET_lai_co2 * 365.25 # 假设是日均值
     
     IA_nat = PET_lai_co2_annual / P
@@ -170,32 +161,38 @@ def step2_pet_comparison(df: pd.DataFrame) -> pd.DataFrame:
     pet_standard_calc = PenmanMonteith()
     # 模拟数据输入 (注意单位转换)
     pet_standard = pet_standard_calc.calculate(
-        temp_avg=df['T_avg'].values,
-        temp_max=df['T_max'].values,
-        temp_min=df['T_min'].values,
-        rh_mean=df['RH'].values,
-        wind_speed=df['u2'].values,
-        solar_radiation=df['Rn_MJ'].values, # PM需要 MJ/m²/day
+        temp_avg=df['T_avg'].to_numpy(),
+        temp_max=df['T_max'].to_numpy(),
+        temp_min=df['T_min'].to_numpy(),
+        rh_mean=df['RH'].to_numpy(),
+        wind_speed=df['u2'].to_numpy(),
+        solar_radiation=df['Rn_MJ'].to_numpy(), # PM需要 MJ/m²/day
         latitude=40.0,
         elevation=500.0,
         day_of_year=np.tile(np.arange(1, 366), len(df)//365 + 1)[:len(df)] # 简化
     )
     # 从日均转为年总量
-    pet_standard_annual = pd.Series(pet_standard).rolling(window=365, min_periods=365).sum().values
-    pet_standard_annual[np.isnan(pet_standard_annual)] = pet_standard_annual[~np.isnan(pet_standard_annual)][0] # 填充
+    pet_standard_annual = pd.Series(pet_standard).rolling(window=365, min_periods=365).sum().to_numpy()
+    mean_ps = float(np.nanmean(pet_standard_annual))
+    if not np.isfinite(mean_ps):
+        mean_ps = float(np.nanmean(pet_standard)) if np.isfinite(np.nanmean(pet_standard)) else 0.0
+    pet_standard_annual = np.where(np.isnan(pet_standard_annual), mean_ps, pet_standard_annual)
     
     # (在我们的模拟中, PET_lai_co2已经是年值, 为公平比较, 我们重新日算)
-    pet_calc_lai_co2 = PenmanMonteithLAICO2(elevation=500, latitude=40)
+    pet_calc_lai_co2 = PETWithLAICO2(elevation=500, latitude=40)
     pet_lai_co2_daily = pet_calc_lai_co2.calculate(
-        T_avg=df['T_avg'].values, # 假设是日均
-        Rn=df['Rn_W'].values, # W/m²
-        u2=df['u2'].values,
-        RH=df['RH'].values,
-        LAI=df['LAI'].values,
-        CO2=df['CO2'].values
+        temperature=df['T_avg'].values,  # 假设是日均
+        humidity=df['RH'].values,
+        wind_speed=df['u2'].values,
+        radiation=df['Rn_W'].values,     # W/m²
+        lai=df['LAI'].values,
+        co2=df['CO2'].values
     )
-    pet_lai_co2_annual = pd.Series(pet_lai_co2_daily).rolling(window=365, min_periods=365).sum().values
-    pet_lai_co2_annual = np.nan_to_num(pet_lai_co2_annual, nan=np.nanmean(pet_lai_co2_annual))
+    pet_lai_co2_annual = pd.Series(pet_lai_co2_daily).rolling(window=365, min_periods=365).sum().to_numpy()
+    mean_plc = float(np.nanmean(pet_lai_co2_annual))
+    if not np.isfinite(mean_plc):
+        mean_plc = float(np.nanmean(pet_lai_co2_daily)) if np.isfinite(np.nanmean(pet_lai_co2_daily)) else 0.0
+    pet_lai_co2_annual = np.where(np.isnan(pet_lai_co2_annual), mean_plc, pet_lai_co2_annual)
 
     df['PET_standard'] = pet_standard_annual
     df['PET_lai_co2'] = pet_lai_co2_annual # 更新为日转年
@@ -208,7 +205,7 @@ def step2_pet_comparison(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # --- 3. 水量平衡计算 ---
-def step3_water_balance(df: pd.DataFrame) -> WaterBalanceResults:
+def step3_water_balance(df: pd.DataFrame) -> Tuple[pd.DataFrame, WaterBalanceResults]:
     """计算2D和3D Budyko指数 (基于观测径流Q_obs)"""
     print("\n[3. 水量平衡计算 (基于 Q_obs)]")
     
@@ -217,15 +214,17 @@ def step3_water_balance(df: pd.DataFrame) -> WaterBalanceResults:
     # 使用创新的PET (PET_lai_co2) 作为能量项
     # 使用观测的径流 (Q_obs) 作为水量项
     wb_results = wb_calc.calculate_budyko_indices(
-        P=df['P'].values,
-        Q=df['Q_obs'].values,
-        PET=df['PET_lai_co2'].values,
-        delta_S=df['delta_S'].values, # 提供ΔS用于3D分析
-        TWS=df['TWS'].values          # 提供TWS用于3D分析
+        P=df['P'].to_numpy(),
+        Q=df['Q_obs'].to_numpy(),
+        PET=df['PET_lai_co2'].to_numpy(),
+        delta_S=df['delta_S'].to_numpy(), # 提供ΔS用于3D分析
+        TWS=df['TWS'].to_numpy()          # 提供TWS用于3D分析
     )
     
     print(f"  2D (P-Q):     IA={np.nanmean(wb_results.aridity_index):.3f}, IE={np.nanmean(wb_results.evaporation_index):.3f}")
-    print(f"  3D (P-Q-ΔS):  IE_ext={np.nanmean(wb_results.evaporation_index_extended):.3f}, SCI={np.nanmean(wb_results.storage_change_index):.3f}")
+    ie_ext_mean = float(np.nanmean(wb_results.evaporation_index_extended)) if wb_results.evaporation_index_extended is not None else float('nan')
+    sci_mean = float(np.nanmean(wb_results.storage_change_index)) if wb_results.storage_change_index is not None else float('nan')
+    print(f"  3D (P-Q-ΔS):  IE_ext={ie_ext_mean:.3f}, SCI={sci_mean:.3f}")
     
     # 将结果添加回df
     df['IA'] = wb_results.aridity_index
@@ -254,13 +253,15 @@ def step4_ibrahim_analysis(df: pd.DataFrame) -> Dict:
     # Step 1: 拟合各时段ω
     for name, start, end in period_defs:
         period_df = df[(df['year'] >= start) & (df['year'] <= end)]
-        omega, stats = BudykoCurves.fit_omega(period_df['IA'], period_df['IE'])
+        omega, stats = BudykoCurves.fit_omega(period_df['IA'].to_numpy(), period_df['IE'].to_numpy())
         periods_data[name] = {
             'omega': omega,
-            'ia_annual': period_df['IA'].values,
-            'ie_annual': period_df['IE'].values,
+            'ia_annual': period_df['IA'].to_numpy(),
+            'ie_annual': period_df['IE'].to_numpy(),
             'ia_mean': period_df['IA'].mean(),
-            'ie_mean': period_df['IE'].mean()
+            'ie_mean': period_df['IE'].mean(),
+            'start_year': start,
+            'end_year': end
         }
         print(f"  {name} ({start}-{end}): ω={omega:.3f}, IE_mean={periods_data[name]['ie_mean']:.3f}")
         
@@ -347,10 +348,10 @@ def step6_attribution_analysis(df: pd.DataFrame, ibrahim_results: Dict) -> Dict:
     df_T3 = df[df['year'].isin(range(2001, 2021))]
     
     attributor.set_deviation(y_deviation)
-    attributor.add_driver('irrigation', df_T3['irrigation_withdrawal'].values)
-    attributor.add_driver('lai', df_T3['LAI'].values)
-    attributor.add_driver('co2', df_T3['CO2'].values)
-    attributor.add_driver('T_avg', df_T3['T_avg'].values)
+    attributor.add_driver('irrigation', df_T3['irrigation_withdrawal'].to_numpy())
+    attributor.add_driver('lai', df_T3['LAI'].to_numpy())
+    attributor.add_driver('co2', df_T3['CO2'].to_numpy())
+    attributor.add_driver('T_avg', df_T3['T_avg'].to_numpy())
     
     # 运行随机森林归因
     rf_results = attributor.random_forest_attribution()
@@ -372,14 +373,14 @@ def step7_snow_analysis_demo(df: pd.DataFrame):
     snow_analyzer = SnowImpactAnalyzer(T_threshold=1.0, melt_factor=2.0)
     
     # 模拟日度数据 (简化)
-    daily_P = np.repeat(df['P'].values, 365) / 365
-    daily_T = np.repeat(df['T_avg'].values, 365) # 粗略
+    daily_P = np.repeat(df['P'].to_numpy(), 365) / 365
+    daily_T = np.repeat(df['T_avg'].to_numpy(), 365) # 粗略
     
     snow_results = snow_analyzer.calculate_snowfall_and_snowmelt(daily_P, daily_T)
     
     # 聚合到年度
     snow_df = pd.DataFrame(snow_results)
-    snow_df['year'] = np.repeat(df['year'].values, 365)
+    snow_df['year'] = np.repeat(df['year'].to_numpy(), 365)
     annual_snow = snow_df.groupby('year').sum()
     
     snow_ratio = annual_snow['snowfall'].sum() / (annual_snow['snowfall'].sum() + annual_snow['rainfall'].sum())
@@ -393,7 +394,7 @@ def step7_snow_analysis_demo(df: pd.DataFrame):
     return snow_ratio
 
 # --- 8. 综合可视化 ---
-def step8_visualization(df: pd.DataFrame, ibrahim: Dict, jaramillo: Dict, attribution: Dict):
+def step8_visualization(df: pd.DataFrame, ibrahim: Dict, jaramillo: Dict, attribution):
     """生成综合图表"""
     print("\n[8. 综合可视化]")
     
@@ -403,7 +404,9 @@ def step8_visualization(df: pd.DataFrame, ibrahim: Dict, jaramillo: Dict, attrib
     # --- 图 A: 核心Budyko空间 (P-Q) ---
     ax_a = fig.add_subplot(gs[0, 0])
     sns.scatterplot(data=df, x='IA', y='IE', hue='year', palette='viridis', s=20, ax=ax_a)
-    BudykoCurves.plot_curves(ax_a, omegas=[2.0, 2.5, 3.0])
+    ia_range = np.linspace(0, 5, 200)
+    for om in [2.0, 2.5, 3.0]:
+        ax_a.plot(ia_range, BudykoCurves.tixeront_fu(ia_range, om), linestyle='--', label=f"ω={om}", alpha=0.6)
     ax_a.set_title("A: Budyko 空间 (IE = (P-Q)/P)", fontweight='bold')
     ax_a.set_xlabel("干旱指数 IA = PET/P")
     ax_a.set_ylabel("蒸发指数 IE = EA/P")
@@ -427,7 +430,9 @@ def step8_visualization(df: pd.DataFrame, ibrahim: Dict, jaramillo: Dict, attrib
              head_width=0.01, length_includes_head=True, fc='r', ec='r')
     ax_c.plot(mov.ia_t1, mov.ie_t1, 'bo', label=f"T1 ({ibrahim['periods']['T1']['start_year']}-{ibrahim['periods']['T1']['end_year']})")
     ax_c.plot(mov.ia_t2, mov.ie_t2, 'rs', label=f"T3 ({ibrahim['periods']['T3']['start_year']}-{ibrahim['periods']['T3']['end_year']})")
-    BudykoCurves.plot_curves(ax_c, omegas=[p['omega'] for p in ibrahim['periods'].values()], linestyle=':')
+    ia_range = np.linspace(0, 5, 200)
+    for om in [p['omega'] for p in ibrahim['periods'].values()]:
+        ax_c.plot(ia_range, BudykoCurves.tixeront_fu(ia_range, om), linestyle=':', color='gray', alpha=0.7)
     ax_c.set_title(f"C: Jaramillo 轨迹 (偏离: {not mov.follows_curve})", fontweight='bold')
     ax_c.set_xlabel("IA (时段均值)")
     ax_c.set_ylabel("IE (时段均值)")
@@ -458,8 +463,8 @@ def step8_visualization(df: pd.DataFrame, ibrahim: Dict, jaramillo: Dict, attrib
     
     # --- 图 G: PET 对比 ---
     ax_g = fig.add_subplot(gs[2, 0])
-    sns.kdeplot(df['PET_standard'], ax=ax_g, label='标准 PM-FAO56', color='gray')
-    sns.kdeplot(df['PET_lai_co2'], ax=ax_g, label='创新 PM (LAI+CO2)', color='green')
+    sns.kdeplot(x=df['PET_standard'], ax=ax_g, label='标准 PM-FAO56', color='gray')
+    sns.kdeplot(x=df['PET_lai_co2'], ax=ax_g, label='创新 PM (LAI+CO2)', color='green')
     ax_g.set_title("G: PET 方法对比", fontweight='bold')
     ax_g.set_xlabel("PET (mm/yr)")
     ax_g.legend()
@@ -484,7 +489,11 @@ def step8_visualization(df: pd.DataFrame, ibrahim: Dict, jaramillo: Dict, attrib
     ax_i.legend()
 
     plt.tight_layout(pad=1.5)
-    save_path = "complex_analysis_summary.png"
+    # 统一输出到脚本同级目录下的 figures 文件夹，文件名包含脚本名
+    figures_dir = Path(__file__).resolve().parent / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    script_stem = Path(__file__).stem
+    save_path = figures_dir / f"{script_stem}__summary.png"
     plt.savefig(save_path, dpi=300)
     print(f"  综合图表已保存到: {save_path}")
     plt.close()
