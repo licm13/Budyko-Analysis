@@ -112,25 +112,25 @@ Budyko-Analysis/
 ├── 研究思路.md                        # 详细研究思路（中文）
 ├── 代码库结构.md                      # 原始结构说明
 │
-├── src/                               # 核心代码模块
+├── src/                               # 核心代码模块（SSOT）
 │   ├── budyko/                        # Budyko分析核心
-│   │   ├── curves.py                  # Budyko曲线公式
-│   │   ├── deviation.py               # Ibrahim偏差分析
-│   │   ├── trajectory_jaramillo.py    # Jaramillo轨迹分析
-│   │   └── water_balance.py           # 水量平衡计算（新增）
+│   │   ├── curves.py                  # Budyko曲线公式（Fu, 1981）
+│   │   ├── deviation.py               # Ibrahim (2025) 偏差分析
+│   │   ├── trajectory_jaramillo.py    # Jaramillo (2022) 轨迹分析
+│   │   └── water_balance.py           # 水量平衡计算（Q是基石）
 │   │
-│   ├── models/                        # 模型模块
-│   │   ├── pet_models.py              # PET模型集合
-│   │   └── pet_lai_co2.py             # LAI+CO2 PET模型（核心创新）
+│   ├── models/                        # PET模型模块（SSOT）
+│   │   ├── pet_models.py              # 标准PET模型集合
+│   │   └── pet_lai_co2.py             # ★ LAI+CO2 PET模型（核心创新）
 │   │
-│   ├── analysis/                      # 分析模块
-│   │   ├── basin_screening.py         # 流域筛选
-│   │   ├── deviation_attribution.py   # 偏差归因分析
-│   │   └── snow_analysis.py           # 积雪影响分析
+│   ├── analysis/                      # 高阶分析模块
+│   │   ├── deviation_attribution.py   # 偏差归因（随机森林）
+│   │   └── snow_analyzer.py           # 积雪影响分析
 │   │
-│   ├── data_processing/               # 数据处理
-│   │   ├── cmip6_processor.py         # CMIP6数据处理
-│   │   └── caravan_loader.py          # Caravan数据加载
+│   ├── data_processing/               # 数据加载与处理（SSOT）
+│   │   ├── basin_processor.py         # ★ 流域数据处理（Q加载）
+│   │   ├── grace_lai_processor.py     # ★ GRACE & LAI加载器
+│   │   └── cmip6_processor.py         # CMIP6数据处理
 │   │
 │   ├── visualization/                 # 可视化
 │   │   ├── budyko_plots.py            # Budyko空间图
@@ -140,12 +140,9 @@ Budyko-Analysis/
 │       └── parallel_processing.py     # 并行计算（万级流域）
 │
 ├── examples/                          # 完整示例（新增）
-│   ├── 01_basic_budyko_analysis.py    # 基础Budyko分析
-│   ├── 02_pet_comparison.py           # PET方法对比
-│   ├── 03_deviation_analysis.py       # 偏差分析
-│   ├── 04_trajectory_analysis.py      # 轨迹分析
-│   ├── 05_attribution_analysis.py     # 归因分析
-│   └── 06_complete_workflow.py        # 完整工作流
+│   ├── 01_real_data_workflow.py       # ★ 真实世界综合工作流（推荐）
+│   ├── complex_integrated_analysis.py # 复杂综合分析
+│   └── complete_workflow_example.py   # 完整工作流示例
 │
 ├── tests/                             # 测试文件
 │   ├── unit/                          # 单元测试
@@ -246,7 +243,7 @@ print("Budyko偏差:", deviation)
 
 ### 完整工作流示例
 
-查看 `examples/06_complete_workflow.py` 获取：
+查看 `examples/01_real_data_workflow.py` 获取：
 - 数据加载（CMFD、径流、LAI、CO2）
 - 流域筛选（面积、数据质量）
 - 多种PET方法对比
