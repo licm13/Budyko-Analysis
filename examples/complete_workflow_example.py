@@ -44,7 +44,16 @@ from analysis.deviation_attribution import DeviationAttributor
 
 # 设置
 sns.set_style('whitegrid')
-plt.rcParams['font.sans-serif'] = ['Arial']
+
+# 导入中文字体配置
+try:
+    from utils.plotting_config import setup_chinese_fonts
+    setup_chinese_fonts()
+except ImportError:
+    # 备用配置
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+
 plt.rcParams['figure.dpi'] = 100
 
 # 创建输出目录

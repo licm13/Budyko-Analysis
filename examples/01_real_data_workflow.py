@@ -33,6 +33,15 @@ from pathlib import Path
 # 假设当前在examples/目录，需要将src/加入路径
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
+# 导入中文字体配置
+try:
+    from utils.plotting_config import setup_chinese_fonts
+    setup_chinese_fonts()
+except ImportError:
+    # 备用配置
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+
 # ========================
 # 导入本代码库的模块
 # ========================
