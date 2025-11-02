@@ -5,6 +5,7 @@ CMIP6数据处理与情景分析
 import xarray as xr
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 from pathlib import Path
 from typing import Dict, List, Tuple
 import warnings
@@ -111,7 +112,6 @@ class CMIP6Processor:
         pd.DataFrame
             流域尺度时间序列
         """
-        import geopandas as gpd
         from rasterstats import zonal_stats
         
         # 读取流域边界

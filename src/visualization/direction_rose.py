@@ -4,6 +4,7 @@ Budyko轨迹方向玫瑰图（Jaramillo风格）
 """
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.projections import PolarAxes
 
 def plot_direction_rose(movements_df: pd.DataFrame,
