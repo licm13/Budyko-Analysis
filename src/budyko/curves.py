@@ -59,7 +59,7 @@ class BudykoCurves:
         ie_values : np.ndarray
             观测的蒸发指数序列
         initial_omega : float
-            初始猜测值
+            初始猜测值 (default: 2.6, will be overridden by smart guess if using default)
             
         Returns
         -------
@@ -68,16 +68,18 @@ class BudykoCurves:
         result : dict
             拟合结果统计
         """
-        # Smart initial guess based on data characteristics
+        # Smart initial guess based on data characteristics (only if using default value)
         # For drier climates (IA > 1), omega tends to be higher
         # For wetter climates (IA < 1), omega tends to be lower
-        mean_ia = np.mean(ia_values)
-        if mean_ia > 2:
-            initial_omega = 3.5
-        elif mean_ia > 1.5:
-            initial_omega = 3.0
-        elif mean_ia < 0.8:
-            initial_omega = 2.0
+        smart_guess = initial_omega
+        if initial_omega == 2.6:  # Only override if using default
+            mean_ia = np.mean(ia_values)
+            if mean_ia > 2:
+                smart_guess = 3.5
+            elif mean_ia > 1.5:
+                smart_guess = 3.0
+            elif mean_ia < 0.8:
+                smart_guess = 2.0
         
         def objective(omega):
             ie_pred = BudykoCurves.tixeront_fu(ia_values, omega[0])
@@ -86,7 +88,7 @@ class BudykoCurves:
         
         # 优化 - use more efficient method for bounded optimization
         res = minimize(objective, 
-                      x0=[initial_omega],
+                      x0=[smart_guess],
                       bounds=[(0.1, 10.0)],
                       method='L-BFGS-B',
                       options={'ftol': 1e-6, 'maxiter': 100})  # Add convergence tolerance

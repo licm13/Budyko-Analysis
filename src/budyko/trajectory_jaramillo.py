@@ -291,23 +291,26 @@ class TrajectoryAnalyzer:
         np.ndarray
             Array of movement type strings
         """
-        n = len(delta_ia)
-        movement_types = np.empty(n, dtype=object)
-        
         # Stationary check
         stationary = (np.abs(delta_ia) < 0.01) & (np.abs(delta_ie) < 0.01)
         
-        # Classify non-stationary movements
+        # Build classification components
         aridity_change = np.where(delta_ia > 0, "Aridification", "Humidification")
         evap_change = np.where(delta_ie > 0, "Evap_increase", "Evap_decrease")
         trajectory = np.where(follows_curve, "Following", "Deviating")
         
-        # Combine labels
-        for i in range(n):
-            if stationary[i]:
-                movement_types[i] = "Stationary"
-            else:
-                movement_types[i] = f"{trajectory[i]}_{aridity_change[i]}_{evap_change[i]}"
+        # Fully vectorized string concatenation using np.char
+        movement_types = np.where(
+            stationary,
+            "Stationary",
+            np.char.add(
+                np.char.add(
+                    np.char.add(trajectory, "_"),
+                    aridity_change
+                ),
+                np.char.add("_", evap_change)
+            )
+        )
         
         return movement_types
 

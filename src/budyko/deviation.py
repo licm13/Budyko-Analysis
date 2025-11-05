@@ -112,7 +112,7 @@ class DeviationAnalysis:
             Sample skewness (no bias correction to match scipy.stats.skew default)
         """
         n = len(data)
-        if n < 3:
+        if n < 2:
             return 0.0
         
         # Compute mean and std in one pass
