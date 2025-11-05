@@ -140,24 +140,19 @@ class BasinDataProcessor:
             data.loc[negative_mask, 'Q'] = np.nan
             print(f"  警告: 发现 {negative_mask.sum()} 个负值，已设为NaN")
 
-        # 2. 逐流域检测异常值（IQR方法）
-        for basin_id in data['basin_id'].unique():
-            mask = data['basin_id'] == basin_id
-            Q = data.loc[mask, 'Q'].values
-
-            # 计算IQR
-            Q1 = np.nanpercentile(Q, 25)
-            Q3 = np.nanpercentile(Q, 75)
-            IQR = Q3 - Q1
-
-            # 异常值阈值（3倍IQR，较宽松）
-            lower_bound = Q1 - 3 * IQR
-            upper_bound = Q3 + 3 * IQR
-
-            # 标记异常值
-            outlier_mask = (Q < lower_bound) | (Q > upper_bound)
-            if outlier_mask.any():
-                data.loc[mask & pd.Series(outlier_mask, index=data[mask].index), 'Q_flag'] = 'outlier'
+        # 2. 逐流域检测异常值（IQR方法） - Optimized using groupby
+        grouped = data.groupby('basin_id')['Q']
+        
+        # Vectorized percentile calculation
+        q25 = grouped.transform(lambda x: np.nanpercentile(x, 25))
+        q75 = grouped.transform(lambda x: np.nanpercentile(x, 75))
+        iqr = q75 - q25
+        
+        # Vectorized outlier detection
+        lower_bound = q25 - 3 * iqr
+        upper_bound = q75 + 3 * iqr
+        outlier_mask = (data['Q'] < lower_bound) | (data['Q'] > upper_bound)
+        data.loc[outlier_mask, 'Q_flag'] = 'outlier'
 
         n_outliers = (data['Q_flag'] == 'outlier').sum()
         if n_outliers > 0:

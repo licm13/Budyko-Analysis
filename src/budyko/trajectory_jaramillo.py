@@ -213,7 +213,7 @@ class TrajectoryAnalyzer:
                                  catchment_id_col: str = 'catchment_id',
                                  omega_col: str = None) -> pd.DataFrame:
         """
-        批量计算多个流域的运动
+        批量计算多个流域的运动 (Vectorized for better performance)
         
         Parameters
         ----------
@@ -233,46 +233,87 @@ class TrajectoryAnalyzer:
         pd.DataFrame
             运动结果表
         """
-        results = []
+        # Vectorized calculations for better performance
+        ia_t1 = data[period_1_cols[0]].values
+        ie_t1 = data[period_1_cols[1]].values
+        ia_t2 = data[period_2_cols[0]].values
+        ie_t2 = data[period_2_cols[1]].values
         
-        for idx, row in data.iterrows():
-            period_1 = {
-                'IA': row[period_1_cols[0]],
-                'IE': row[period_1_cols[1]],
-                'name': 'Period_1'
-            }
-            
-            period_2 = {
-                'IA': row[period_2_cols[0]],
-                'IE': row[period_2_cols[1]],
-                'name': 'Period_2'
-            }
-            
-            omega = row[omega_col] if omega_col and omega_col in row else None
-            
-            movement = self.calculate_movement(
-                catchment_id=row[catchment_id_col],
-                period_1=period_1,
-                period_2=period_2,
-                reference_omega=omega
+        # Calculate deltas vectorized
+        delta_ia = np.round(ia_t2 - ia_t1, 10)
+        delta_ie = np.round(ie_t2 - ie_t1, 10)
+        
+        # Calculate intensity vectorized
+        intensity = np.sqrt(delta_ia**2 + delta_ie**2)
+        
+        # Calculate direction angles vectorized
+        direction_angle = np.degrees(np.arctan2(delta_ia, delta_ie))
+        direction_angle = np.where(direction_angle < 0, direction_angle + 360, direction_angle)
+        
+        # Vectorized check for following curve
+        follows_curve = np.zeros(len(data), dtype=bool)
+        for angle_min, angle_max in self.FOLLOW_ANGLE_RANGES:
+            follows_curve |= (direction_angle >= angle_min) & (direction_angle <= angle_max)
+        
+        # Build result DataFrame efficiently
+        results = pd.DataFrame({
+            'catchment_id': data[catchment_id_col].values,
+            'IA_t1': ia_t1,
+            'IE_t1': ie_t1,
+            'IA_t2': ia_t2,
+            'IE_t2': ie_t2,
+            'delta_IA': delta_ia,
+            'delta_IE': delta_ie,
+            'intensity': intensity,
+            'direction_angle': direction_angle,
+            'follows_curve': follows_curve,
+            'reference_omega': data[omega_col].values if omega_col and omega_col in data.columns else np.nan
+        })
+        
+        # Vectorized movement type classification
+        results['movement_type'] = self._classify_movement_vectorized(
+            delta_ia, delta_ie, ia_t1, ie_t1, follows_curve
+        )
+        
+        return results
+    
+    @staticmethod
+    def _classify_movement_vectorized(delta_ia: np.ndarray,
+                                     delta_ie: np.ndarray,
+                                     ia_start: np.ndarray,
+                                     ie_start: np.ndarray,
+                                     follows_curve: np.ndarray) -> np.ndarray:
+        """
+        Vectorized movement classification for better performance
+        
+        Returns
+        -------
+        np.ndarray
+            Array of movement type strings
+        """
+        # Stationary check
+        stationary = (np.abs(delta_ia) < 0.01) & (np.abs(delta_ie) < 0.01)
+        
+        # Build classification components
+        aridity_change = np.where(delta_ia > 0, "Aridification", "Humidification")
+        evap_change = np.where(delta_ie > 0, "Evap_increase", "Evap_decrease")
+        trajectory = np.where(follows_curve, "Following", "Deviating")
+        
+        # Fully vectorized string concatenation using np.char
+        movement_types = np.where(
+            stationary,
+            "Stationary",
+            np.char.add(
+                np.char.add(
+                    np.char.add(trajectory, "_"),
+                    aridity_change
+                ),
+                np.char.add("_", evap_change)
             )
-            
-            results.append({
-                'catchment_id': movement.catchment_id,
-                'IA_t1': movement.ia_t1,
-                'IE_t1': movement.ie_t1,
-                'IA_t2': movement.ia_t2,
-                'IE_t2': movement.ie_t2,
-                'delta_IA': movement.delta_ia,
-                'delta_IE': movement.delta_ie,
-                'intensity': movement.intensity,
-                'direction_angle': movement.direction_angle,
-                'follows_curve': movement.follows_curve,
-                'movement_type': movement.movement_type,
-                'reference_omega': movement.reference_omega
-            })
+        )
         
-        return pd.DataFrame(results)
+        return movement_types
+
 
 
 class MovementStatistics:
