@@ -5,6 +5,7 @@ Budyko框架核心公式实现
 import numpy as np
 from scipy.optimize import minimize
 from typing import Tuple, Optional
+from functools import lru_cache
 
 class BudykoCurves:
     """Budyko曲线计算类"""
@@ -67,16 +68,28 @@ class BudykoCurves:
         result : dict
             拟合结果统计
         """
+        # Smart initial guess based on data characteristics
+        # For drier climates (IA > 1), omega tends to be higher
+        # For wetter climates (IA < 1), omega tends to be lower
+        mean_ia = np.mean(ia_values)
+        if mean_ia > 2:
+            initial_omega = 3.5
+        elif mean_ia > 1.5:
+            initial_omega = 3.0
+        elif mean_ia < 0.8:
+            initial_omega = 2.0
+        
         def objective(omega):
             ie_pred = BudykoCurves.tixeront_fu(ia_values, omega[0])
             residuals = ie_values - ie_pred
             return np.sum(residuals**2)
         
-        # 优化
+        # 优化 - use more efficient method for bounded optimization
         res = minimize(objective, 
                       x0=[initial_omega],
                       bounds=[(0.1, 10.0)],
-                      method='L-BFGS-B')
+                      method='L-BFGS-B',
+                      options={'ftol': 1e-6, 'maxiter': 100})  # Add convergence tolerance
         
         omega_opt = res.x[0]
         

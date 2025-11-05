@@ -72,20 +72,62 @@ class DeviationAnalysis:
         # 计算年度偏差 εIEω = IE,obs - IE,expected
         epsilon = ie_obs_i_plus_1 - ie_expected_i_plus_1
         
-        # 统计量
+        # Compute percentiles once (used by both IQR and skew fitting)
+        percentiles = np.percentile(epsilon, [25, 50, 75])
+        
+        # 统计量 - optimized to reduce redundant calculations
         distribution = DeviationDistribution(
             period_name=period_pair,
             annual_deviations=epsilon,
-            median=np.median(epsilon),
+            median=percentiles[1],  # Use precomputed median
             mean=np.mean(epsilon),
             std=np.std(epsilon, ddof=1),
-            iqr=np.percentile(epsilon, 75) - np.percentile(epsilon, 25),
-            skew=stats.skew(epsilon),
+            iqr=percentiles[2] - percentiles[0],  # Use precomputed quartiles
+            skew=self._fast_skew(epsilon),  # Use optimized skewness calculation
             fitted_params=self._fit_skew_normal(epsilon)
         )
         
         self.distributions[period_pair] = distribution
         return distribution
+    
+    @staticmethod
+    def _fast_skew(data: np.ndarray) -> float:
+        """
+        Fast skewness calculation using numpy operations
+        
+        Skewness = E[(X - μ)³] / σ³
+        
+        This is faster than scipy.stats.skew() for small datasets
+        by avoiding unnecessary overhead and using optimized numpy operations.
+        Uses the same default bias as scipy (bias=True, no correction).
+        
+        Parameters
+        ----------
+        data : np.ndarray
+            Input data
+            
+        Returns
+        -------
+        float
+            Sample skewness (no bias correction to match scipy.stats.skew default)
+        """
+        n = len(data)
+        if n < 3:
+            return 0.0
+        
+        # Compute mean and std in one pass
+        mean = np.mean(data)
+        centered = data - mean
+        
+        # Compute moments
+        m2 = np.mean(centered ** 2)
+        m3 = np.mean(centered ** 3)
+        
+        # Sample skewness (no bias correction, matching scipy default)
+        if m2 == 0:
+            return 0.0
+        
+        return m3 / (m2 ** 1.5)
     
     @staticmethod
     def _fit_skew_normal(data: np.ndarray) -> Dict:
