@@ -68,8 +68,8 @@ def main() -> None:
             "IA": workflow.predictions["Ep_mm_yr"] / workflow.predictions["P_mm_yr"],
             "IE": 1 - workflow.predictions["runoff_ratio"],
             "omega": workflow.predictions["alpha"].mean(),
-            "ia_mean": float((workflow.predictions["Ep_mm_yr"] / workflow.predictions["P_mm_yr"]).mean()),
-            "ie_mean": float((1 - workflow.predictions["runoff_ratio"]).mean()),
+            "ia_mean": (workflow.predictions["Ep_mm_yr"] / workflow.predictions["P_mm_yr"]).mean(),
+            "ie_mean": (1 - workflow.predictions["runoff_ratio"]).mean(),
             "start_year": 2000,
             "end_year": 2011,
         }
