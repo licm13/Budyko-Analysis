@@ -1,11 +1,18 @@
 # src/budyko/curves.py
-"""
-Budyko框架核心公式实现
-"""
+"""Budyko框架核心公式实现."""
+
+from functools import lru_cache
+from typing import Optional, Tuple
+
 import numpy as np
 from scipy.optimize import minimize
-from typing import Tuple, Optional
-from functools import lru_cache
+
+from ..utils import (
+    bfc_baseflow_ratio,
+    budyko_runoff_ratio,
+    estimate_alpha,
+    estimate_potential_baseflow,
+)
 
 class BudykoCurves:
     """Budyko曲线计算类"""
@@ -187,7 +194,61 @@ class PotentialEvaporation:
         # 大气顶辐射
         gsc = 0.0820  # 太阳常数 [MJ m-2 min-1]
         ra = (24 * 60 / np.pi) * gsc * dr * \
-             (ws * np.sin(lat_rad) * np.sin(declination) + 
+             (ws * np.sin(lat_rad) * np.sin(declination) +
               np.cos(lat_rad) * np.cos(declination) * np.sin(ws))
-        
+
         return ra
+
+
+def fu_zhang_runoff_ratio(precipitation: np.ndarray,
+                          potential_et: np.ndarray,
+                          alpha: np.ndarray) -> np.ndarray:
+    """Convenience wrapper returning the Fu-Zhang Budyko runoff ratio."""
+
+    return budyko_runoff_ratio(precipitation, potential_et, alpha)
+
+
+def cheng_baseflow_ratio(precipitation: np.ndarray,
+                         potential_et: np.ndarray,
+                         alpha: np.ndarray,
+                         potential_baseflow: np.ndarray) -> np.ndarray:
+    """Return the Cheng et al. (2021) Budyko baseflow coefficient."""
+
+    return bfc_baseflow_ratio(
+        precipitation,
+        potential_et,
+        alpha,
+        potential_baseflow,
+    )
+
+
+def invert_fu_zhang_alpha(precipitation: np.ndarray,
+                          potential_et: np.ndarray,
+                          runoff: np.ndarray) -> np.ndarray:
+    """Invert the Fu-Zhang formulation to estimate ``alpha`` parameters."""
+
+    return estimate_alpha(precipitation, potential_et, runoff)
+
+
+def invert_cheng_qbp(precipitation: np.ndarray,
+                     potential_et: np.ndarray,
+                     baseflow: np.ndarray,
+                     alpha: np.ndarray) -> np.ndarray:
+    """Estimate potential baseflow ``Q_b,p`` using Cheng et al. (2021)."""
+
+    return estimate_potential_baseflow(
+        precipitation,
+        potential_et,
+        baseflow,
+        alpha,
+    )
+
+
+__all__ = [
+    "BudykoCurves",
+    "PotentialEvaporation",
+    "fu_zhang_runoff_ratio",
+    "cheng_baseflow_ratio",
+    "invert_fu_zhang_alpha",
+    "invert_cheng_qbp",
+]

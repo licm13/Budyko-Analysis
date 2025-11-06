@@ -5,6 +5,12 @@ loading auxiliary datasets (GRACE, LAI, CO2, and optionally CMIP6).
 """
 
 from .basin_processor import BasinDataProcessor
+from .budyko_ml import (
+    BudykoMLColumnMap,
+    BudykoMLPreprocessor,
+    BudykoMLPreprocessorConfig,
+    QCResult,
+)
 from .grace_lai_processor import GRACEDataLoader, LAIDataLoader, CO2DataLoader
 
 # CMIP6 support may be optional depending on user environment
@@ -15,9 +21,13 @@ except Exception:  # pragma: no cover - optional dependency
 
 __all__ = [
     "BasinDataProcessor",
+    "BudykoMLColumnMap",
+    "BudykoMLPreprocessor",
+    "BudykoMLPreprocessorConfig",
     "GRACEDataLoader",
     "LAIDataLoader",
     "CO2DataLoader",
+    "QCResult",
 ]
 
 if CMIP6Processor is not None:  # type: ignore[name-defined]
