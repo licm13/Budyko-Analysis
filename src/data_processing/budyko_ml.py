@@ -8,6 +8,12 @@ from typing import Dict, Mapping, Optional
 import numpy as np
 import pandas as pd
 
+from ..budyko import (
+    cheng_baseflow_ratio,
+    fu_zhang_runoff_ratio,
+    invert_cheng_qbp,
+    invert_fu_zhang_alpha,
+)
 from ..utils import lyne_hollick_filter
 
 
@@ -222,13 +228,6 @@ class BudykoMLPreprocessor:
 
         if precip_mm_yr <= 0 or runoff_mm_yr < 0:
             return None
-
-        from ..budyko import (
-            cheng_baseflow_ratio,
-            fu_zhang_runoff_ratio,
-            invert_cheng_qbp,
-            invert_fu_zhang_alpha,
-        )
 
         alpha_series = invert_fu_zhang_alpha(
             resampled[self.column_map.precipitation].to_numpy(),
