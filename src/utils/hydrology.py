@@ -119,7 +119,6 @@ def estimate_alpha(
     runoff = np.asarray(runoff, dtype=float)
 
     runoff_ratio_obs = runoff / precipitation
-    aridity = potential_et / precipitation
     alpha = np.full_like(runoff_ratio_obs, 2.0, dtype=float)
 
     for _ in range(max_iter):
