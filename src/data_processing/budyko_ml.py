@@ -181,7 +181,7 @@ class BudykoMLPreprocessor:
             baseflow_column = None  # Force computation below
 
         if baseflow_column:
-            baseflow = df[baseflow_column].to_numpy(dtype=float)
+            pass  # baseflow column exists, will use it below
         else:
             baseflow, quick = lyne_hollick_filter(
                 df[self.column_map.discharge].to_numpy(dtype=float),
