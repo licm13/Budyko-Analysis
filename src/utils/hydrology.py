@@ -202,16 +202,17 @@ def lyne_hollick_filter(
     flow = np.asarray(discharge, dtype=float)
     quick = flow.copy()
 
+    alpha_term = (1 + alpha) / 2
     for p in range(max(passes, 1)):
         if p % 2 == 0:
             for i in range(1, len(flow)):
-                quick[i] = alpha * quick[i - 1] + (1 + alpha) / 2 * (
+                quick[i] = alpha * quick[i - 1] + alpha_term * (
                     flow[i] - flow[i - 1]
                 )
                 quick[i] = np.clip(quick[i], 0.0, flow[i])
         else:
             for i in range(len(flow) - 2, -1, -1):
-                quick[i] = alpha * quick[i + 1] + (1 + alpha) / 2 * (
+                quick[i] = alpha * quick[i + 1] + alpha_term * (
                     flow[i] - flow[i + 1]
                 )
                 quick[i] = np.clip(quick[i], 0.0, flow[i])
