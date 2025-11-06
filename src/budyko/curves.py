@@ -1,7 +1,7 @@
 # src/budyko/curves.py
 """Budyko框架核心公式实现."""
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 from scipy.optimize import minimize
