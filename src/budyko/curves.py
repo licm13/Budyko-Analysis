@@ -1,7 +1,6 @@
 # src/budyko/curves.py
 """Budyko框架核心公式实现."""
 
-from functools import lru_cache
 from typing import Optional, Tuple
 
 import numpy as np
