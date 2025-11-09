@@ -117,8 +117,7 @@ class DeviationAnalysis:
         3. Performance difference negligible for n < 100
         4. Supports multiple bias correction methods
         """
-        from scipy.stats import skew
-        return float(skew(data, bias=True, nan_policy='omit'))
+        return float(stats.skew(data, bias=True, nan_policy='omit'))
     
     @staticmethod
     def _fit_skew_normal(data: np.ndarray) -> Dict:
