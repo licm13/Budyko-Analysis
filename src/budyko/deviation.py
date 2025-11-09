@@ -74,8 +74,8 @@ class DeviationAnalysis:
         
         # Compute percentiles once (used by both IQR and skew fitting)
         percentiles = np.percentile(epsilon, [25, 50, 75])
-        
-        # 统计量 - optimized to reduce redundant calculations
+
+        # Statistical summary - optimized to reduce redundant calculations
         distribution = DeviationDistribution(
             period_name=period_pair,
             annual_deviations=epsilon,
@@ -83,7 +83,7 @@ class DeviationAnalysis:
             mean=np.mean(epsilon),
             std=np.std(epsilon, ddof=1),
             iqr=percentiles[2] - percentiles[0],  # Use precomputed quartiles
-            skew=self._fast_skew(epsilon),  # Use optimized skewness calculation
+            skew=self._calculate_skewness(epsilon),
             fitted_params=self._fit_skew_normal(epsilon)
         )
         
@@ -91,43 +91,34 @@ class DeviationAnalysis:
         return distribution
     
     @staticmethod
-    def _fast_skew(data: np.ndarray) -> float:
+    def _calculate_skewness(data: np.ndarray) -> float:
         """
-        Fast skewness calculation using numpy operations
-        
-        Skewness = E[(X - μ)³] / σ³
-        
-        This is faster than scipy.stats.skew() for small datasets
-        by avoiding unnecessary overhead and using optimized numpy operations.
-        Uses the same default bias as scipy (bias=True, no correction).
-        
+        Calculate skewness using scipy for reliability and accuracy.
+
+        For the typical dataset sizes in Budyko analysis (10-50 data points),
+        scipy.stats.skew() provides optimal performance with better numerical
+        stability and well-tested edge case handling.
+
         Parameters
         ----------
         data : np.ndarray
             Input data
-            
+
         Returns
         -------
         float
-            Sample skewness (no bias correction to match scipy.stats.skew default)
+            Sample skewness (bias=True, Fisher's definition)
+
+        Notes
+        -----
+        Using scipy.stats.skew instead of custom implementation because:
+        1. Better numerical stability for edge cases
+        2. Well-tested and maintained
+        3. Performance difference negligible for n < 100
+        4. Supports multiple bias correction methods
         """
-        n = len(data)
-        if n < 2:
-            return 0.0
-        
-        # Compute mean and std in one pass
-        mean = np.mean(data)
-        centered = data - mean
-        
-        # Compute moments
-        m2 = np.mean(centered ** 2)
-        m3 = np.mean(centered ** 3)
-        
-        # Sample skewness (no bias correction, matching scipy default)
-        if m2 == 0:
-            return 0.0
-        
-        return m3 / (m2 ** 1.5)
+        from scipy.stats import skew
+        return float(skew(data, bias=True, nan_policy='omit'))
     
     @staticmethod
     def _fit_skew_normal(data: np.ndarray) -> Dict:
