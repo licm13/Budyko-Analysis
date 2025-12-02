@@ -186,6 +186,17 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
+### 本地运行前的准备
+
+- **依赖安装**：建议使用 `python -m venv venv` 创建虚拟环境，并运行 `pip install -r requirements.txt` 安装全部依赖（含科学计算与绘图库）。
+- **数据下载/解压**：
+  - 默认数据目录为 `data/processed`，输出目录为 `results`（在 `Scripts/run_full_analysis.py` 顶部集中配置）。
+  - 将处理好的 `catchments.csv`（需包含 `id` 列）以及对应的 `<id>.csv` 数据文件放入 `data/processed/`。
+  - 如目录不存在或文件缺失，脚本会提示缺失原因并自动回退到演示数据。
+- **可能的运行时间**：
+  - 使用内置演示数据（单个流域）通常在数秒内完成。
+  - 真实批量数据（数十到数百流域）会因机器性能与文件大小不同，大约需要数分钟至十余分钟，请预留足够时间并确保有充足的磁盘空间。
+
 ### 基础示例
 
 ```python
