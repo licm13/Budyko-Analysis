@@ -17,6 +17,65 @@ from budyko.deviation import DeviationAnalysis, TemporalStability, MarginalDistr
 from visualization.budyko_plots import BudykoVisualizer
 
 
+DATA_DIR = Path("./data/processed")
+OUTPUT_DIR = Path("./results")
+CATCHMENT_LIST_FILENAME = "catchments.csv"
+
+
+def ensure_output_directory() -> None:
+    """Create the output directory if it does not exist."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_catchment_list() -> pd.DataFrame:
+    """Load the catchment list or fall back to a demo catchment with guidance."""
+    catchment_list_path = DATA_DIR / CATCHMENT_LIST_FILENAME
+    if not catchment_list_path.exists():
+        print(
+            f"\n[Info] 未找到流域列表文件: {catchment_list_path.resolve()}\n"
+            "    请将 catchments.csv 放在数据目录下，文件需包含一列 'id'。\n"
+            "    当前将使用演示流域 DEMO_001 继续运行。"
+        )
+        return pd.DataFrame({'id': ['DEMO_001']})
+
+    try:
+        catchments = pd.read_csv(catchment_list_path)
+        if 'id' not in catchments.columns:
+            raise ValueError("catchments.csv 缺少 'id' 列")
+        return catchments
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"\n[Info] 无法读取流域列表 {catchment_list_path} ({exc})。\n"
+            "    请检查文件格式是否为CSV且包含'id'列。\n"
+            "    当前将使用演示流域 DEMO_001 继续运行。"
+        )
+        return pd.DataFrame({'id': ['DEMO_001']})
+
+
+def load_catchment_data(catchment_id: str) -> pd.DataFrame:
+    """Load catchment data or synthesize a demo dataset with helpful messaging."""
+    data_path = DATA_DIR / f"{catchment_id}.csv"
+    if not data_path.exists():
+        print(
+            f"[Info] 未找到流域数据文件: {data_path.resolve()}。\n"
+            "       请将处理好的CSV放入数据目录，或使用演示数据继续。"
+        )
+        return _synthesize_demo_catchment()
+
+    try:
+        data = pd.read_csv(data_path)
+        required_cols = {'year', 'P', 'EP', 'EA', 'Q'}
+        if not required_cols.issubset(set(data.columns)):
+            raise ValueError(f"缺少列: {required_cols - set(data.columns)}")
+        return data
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[Info] 读取流域数据 {data_path} 时出错 ({exc})。\n"
+            "       请确认文件包含 year, P, EP, EA, Q 列。将改用演示数据。"
+        )
+        return _synthesize_demo_catchment()
+
+
 class BudykoDeviationPipeline:
     """Budyko偏差分析完整流程"""
     
@@ -328,43 +387,33 @@ def _synthesize_demo_catchment(year_start: int = 1901, year_end: int = 2000, see
 
 # 主程序入口
 if __name__ == "__main__":
-    # 配置
+    ensure_output_directory()
+
+    if not DATA_DIR.exists():
+        print(
+            f"\n[Info] 数据目录不存在: {DATA_DIR.resolve()}\n"
+            "       请先下载并解压数据到该目录。当前将使用演示数据运行。"
+        )
+        catchments = pd.DataFrame({'id': ['DEMO_001']})
+    else:
+        catchments = load_catchment_list()
+
     config = {
-        'data_dir': './data/processed',
-        'output_dir': './results',
-        'catchment_list': 'catchments.csv'
+        'data_dir': DATA_DIR,
+        'output_dir': OUTPUT_DIR,
+        'catchment_list': CATCHMENT_LIST_FILENAME
     }
-    
+
     # 初始化流程
     pipeline = BudykoDeviationPipeline(config)
-    
-    # 读取流域列表（若不存在则使用演示流域）
-    catchment_list_path = Path(config['data_dir']) / config['catchment_list']
-    try:
-        catchments = pd.read_csv(catchment_list_path)
-        if 'id' not in catchments.columns:
-            raise ValueError("catchments.csv 缺少 'id' 列")
-    except Exception as e:
-        print(f"\n[Info] Catchment list not found or invalid ({e}). Using a demo catchment 'DEMO_001'.")
-        catchments = pd.DataFrame({'id': ['DEMO_001']})
-    
+
     # 批量分析
     all_results = {}
     for idx, row in catchments.iterrows():
         catchment_id = str(row['id'])
-        
-        # 加载数据（若不存在则合成演示数据）
-        data_path = Path(config['data_dir']) / f"{catchment_id}.csv"
-        try:
-            data = pd.read_csv(data_path)
-            # Ensure required columns exist
-            required_cols = {'year', 'P', 'EP', 'EA', 'Q'}
-            if not required_cols.issubset(set(data.columns)):
-                raise ValueError(f"{data_path} 缺少列: {required_cols - set(data.columns)}")
-        except Exception as e:
-            print(f"[Info] Data for '{catchment_id}' not found or invalid ({e}). Generating a synthetic demo dataset.")
-            data = _synthesize_demo_catchment()
-        
+
+        data = load_catchment_data(catchment_id)
+
         # 运行分析
         result = pipeline.run_catchment_analysis(catchment_id, data)
         all_results[catchment_id] = result
