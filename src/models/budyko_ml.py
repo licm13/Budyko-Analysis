@@ -10,12 +10,21 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.model_selection import KFold
 
-from ..utils import (
-    bfc_baseflow_ratio,
-    budyko_runoff_ratio,
-    coefficient_of_determination,
-    root_mean_square_error,
-)
+try:
+    from ..utils import (
+        bfc_baseflow_ratio,
+        budyko_runoff_ratio,
+        coefficient_of_determination,
+        root_mean_square_error,
+    )
+except ImportError:
+    # Fallback for when module is imported from notebooks
+    from utils.hydrology import (
+        bfc_baseflow_ratio,
+        budyko_runoff_ratio,
+        coefficient_of_determination,
+        root_mean_square_error,
+    )
 
 try:  # pragma: no cover - optional dependency
     from xgboost import XGBRegressor

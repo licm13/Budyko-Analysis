@@ -6,12 +6,20 @@ from typing import Tuple
 import numpy as np
 from scipy.optimize import minimize
 
-from ..utils import (
-    bfc_baseflow_ratio,
-    budyko_runoff_ratio,
-    estimate_alpha,
-    estimate_potential_baseflow,
-)
+try:
+    from ..utils import (
+        bfc_baseflow_ratio,
+        budyko_runoff_ratio,
+        estimate_alpha,
+        estimate_potential_baseflow,
+    )
+except ImportError:
+    from utils.hydrology import (
+        bfc_baseflow_ratio,
+        budyko_runoff_ratio,
+        estimate_alpha,
+        estimate_potential_baseflow,
+    )
 
 class BudykoCurves:
     """Budyko曲线计算类"""

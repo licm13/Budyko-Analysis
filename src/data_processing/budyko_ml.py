@@ -8,13 +8,22 @@ from typing import Dict, Mapping, Optional
 import numpy as np
 import pandas as pd
 
-from ..budyko import (
-    cheng_baseflow_ratio,
-    fu_zhang_runoff_ratio,
-    invert_cheng_qbp,
-    invert_fu_zhang_alpha,
-)
-from ..utils import lyne_hollick_filter
+try:
+    from ..budyko import (
+        cheng_baseflow_ratio,
+        fu_zhang_runoff_ratio,
+        invert_cheng_qbp,
+        invert_fu_zhang_alpha,
+    )
+    from ..utils import lyne_hollick_filter
+except ImportError:
+    from budyko.curves import (
+        cheng_baseflow_ratio,
+        fu_zhang_runoff_ratio,
+        invert_cheng_qbp,
+        invert_fu_zhang_alpha,
+    )
+    from utils.hydrology import lyne_hollick_filter
 
 
 @dataclass
