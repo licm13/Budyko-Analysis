@@ -56,7 +56,9 @@ class BudykoCurves:
         原始Budyko (1948) 非参数曲线
         """
         ia = np.asarray(aridity_index)
-        ie = np.sqrt(ia * np.tanh(1/ia) * (1 - np.exp(-ia)))
+        # 避免除以零：将 ia < 0.01 的值设置为 0.01 的最小值
+        ia_safe = np.maximum(ia, 0.01)
+        ie = np.sqrt(ia_safe * np.tanh(1/ia_safe) * (1 - np.exp(-ia_safe)))
         return ie
     
     @staticmethod
