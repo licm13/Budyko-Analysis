@@ -1,803 +1,190 @@
-# Budyko-Analysis: 中国流域水文能量平衡分析框架
+🌀 Budyko-Analysis | Hydrological water-energy balance for 6000+ Chinese catchments  
+🌀 Budyko-Analysis | 覆盖 6000+ 中国流域的水文能量平衡分析框架
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-
-一个全面的Budyko框架分析工具，专门针对中国6000+小流域的水文能量平衡研究。本框架整合了传统Budyko理论、Ibrahim偏差分析方法和Jaramillo轨迹分析方法，并创新性地引入了**考虑LAI和CO2的PET估算方法**。
-
-本框架整合了：
-1.  **Ibrahim (2025) 偏差分析**：量化流域偏离理论曲线的幅度和时间稳定性。
-2.  **Jaramillo (2022) 轨迹分析**：分析流域在Budyko空间中的运动方向和强度。
-3.  **He (2023) 3D框架**：引入储量变化(ΔS)作为第三维度。
-4.  **核心创新**：实现了一个动态的、考虑**LAI和CO2浓度**的Penman-Monteith PET估算方法。
----
-
-## 核心研究框架 (Framework-WBET)
-
-本项目基于以下研究思路：
-
-### 1. 基础验证：流域是否遵循Budyko曲线？
-- **数据基础**：中国6000+小流域观测径流数据（尽量小，无人类活动影响）
-- **气象数据**：0.1°CMFD数据（1960-2020）
-- **核心原理**：
-  - 干旱指数：`IA = PET/P`
-  - 蒸发指数：`IE = EA/P`
-  - 实际蒸发：`EA = P - Q`（径流数据Q是关键）
-
-### 2. 雪的影响有多大？
-- 识别积雪主导流域
-- 量化积雪对水量平衡的贡献
-- 分析融雪期与非融雪期的Budyko关系差异
-
-### 3. 流域偏离Budyko曲线的原因？
-- **三大研究方向**：
-  1. **高精度验证与图谱绘制**（径流是"尺子"）
-     - 确定理论位置：利用PET和P计算理论IA和IE
-     - 确定实际位置：**通过径流Q计算实际EA = P - Q**
-     - 计算偏离：`ε = IE,obs - IE,theory`
-     - 绘制中国流域响应稳定性图谱
-
-  2. **定量归因分析**（径流是"病人"）
-     - **径流数据揭示偏离"症状"**
-     - 引入驱动因子：土地利用、水库、灌溉等
-     - 机器学习建立"病因-症状"联系
-     - 示例：华北平原径流显示严重偏离 → 归因于灌溉
-
-  3. **方法论深化**（径流是"参照物"）
-     - 检验储量变化：`EA' = P - Q - ΔS`（GRACE数据）
-     - PET公式不确定性：多种PET方法对比
-
-### 4. **核心创新：考虑LAI和CO2的PET方法**
-- **这是前人未做过的工作**
-- 传统PET忽略了植被动态和CO2施肥效应
-- 本框架实现：
-  - Penman-Monteith with LAI adjustment
-  - Stomatal conductance response to CO2
-  - 结合MODIS LAI和CO2浓度数据
-
-### 5. 其他创新方面
-- 多尺度分析（流域大小效应）
-- 季节性分析（湿季/干季）
-- 未来情景预测（CMIP6/TRENDY）
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 径流数据（Q）的核心地位
+## 🎯 One-liner | 项目一句话
+Analyze catchment water-energy balance with Budyko theory + LAI/CO2-aware PET + deviation/trajectory analytics, built for large-scale China hydrology.  
+通过 Budyko 理论、支持 LAI/CO2 的 PET 估算，以及偏差/轨迹分析，实现中国大尺度流域水能平衡研究。
 
-### 为什么径流数据是基石？
+## 🧰 Tech Stack | 技术栈
+- Python 3.8+, NumPy/Pandas/SciPy, xarray, scikit-learn, matplotlib  
+- Python 3.8+，NumPy/Pandas/SciPy，xarray，scikit-learn，matplotlib
+- Parallelism via `multiprocessing` + tqdm; notebooks and scripts for workflows  
+- 通过 `multiprocessing`+tqdm 并行；提供 notebook 与脚本工作流
 
-**没有径流数据Q，我们无法进行任何Budyko分析！**
+## 🗂️ File Structure | 目录结构
+- `main_budyko_workflow.py`: end-to-end demo of PET comparison, Budyko indices, deviation/trajectory, attribution.  
+  `main_budyko_workflow.py`: 端到端演示，含 PET 对比、Budyko 指数、偏差/轨迹与归因。
+- `src/` (SSOT core)
+  - `budyko/`: theory ops — `curves.py` (Fu/Tixeront), `water_balance.py` (EA= P-Q, IA/IE), `deviation.py`, `trajectory_jaramillo.py`.  
+    `budyko/`: 理论核心——曲线、水平衡、偏差与轨迹。
+  - `models/`: PET engines — `pet_models.py` (classical), `pet_lai_co2.py` (LAI+CO2 innovation).  
+    `models/`: PET 计算——传统方法与 LAI+CO2 创新。
+  - `data_processing/`: ingestion/QC — `basin_processor.py` (runoff & met extraction), `cmip6_processor.py`, `grace_lai_processor.py`.  
+    `data_processing/`: 数据加载与质控——径流/气象、CMIP6、GRACE/LAI。
+  - `analysis/`: higher-level analytics — `budyko_ml_workflow.py`, `deviation_attribution.py`, `snow_analyzer.py`.  
+    `analysis/`: 高阶分析——Budyko 约束机器学习、偏差归因、积雪分析。
+  - `utils/parallel_processing.py`: `ParallelBudykoAnalyzer` for thousands of catchments.  
+    `utils/parallel_processing.py`: 并行处理万级流域。
+  - `visualization/`: `budyko_plots.py`, `direction_rose.py`.  
+    `visualization/`: Budyko 空间与方向玫瑰可视化。
+- `examples/`: runnable guides (`01_real_data_workflow.py`, `complete_workflow_example.py`, notebooks).  
+  `examples/`: 可运行示例（真实数据工作流、完整工作流、notebook）。
+- `tests/`: unit/integration tests for PET, water balance, full workflow.  
+  `tests/`: PET、水量平衡、全流程的单元与集成测试。
+- `docs/`, `notebooks/`, `Scripts/`, `results/`, `outputs/`: supporting docs, tutorials, batch scripts, sample outputs.  
+  `docs/`、`notebooks/`、`Scripts/`、`results/`、`outputs/`: 文档、教程、批处理脚本与示例结果。
 
-Budyko框架的Y轴是**蒸发指数 (IE)**：
-`IE = EA / P`
+## 🔑 Key Source Code | 核心代码导航
+- Entry workflow: `main_budyko_workflow.py` — orchestrates PET calc → Budyko indices → deviation/trajectory → attribution/plots.  
+  入口工作流：`main_budyko_workflow.py` — 串联 PET、Budyko 指标、偏差/轨迹与归因/可视化。
+- Budyko theory: `src/budyko/curves.py` (Fu/Tixeront curve, ω fitting); `water_balance.py` (EA=P-Q, IA/IE, QC).  
+  Budyko 理论：`src/budyko/curves.py`（曲线与 ω 拟合）；`water_balance.py`（EA=P-Q，IA/IE，质控）。
+- PET core: `src/models/pet_lai_co2.py` (LAI+CO2 Penman-Monteith variant); `pet_models.py` (classics).  
+  PET 核心：`src/models/pet_lai_co2.py`（LAI+CO2 版 PM）；`pet_models.py`（传统集合）。
+- Data pipeline: `src/data_processing/basin_processor.py` (runoff loading, gridded extraction, aggregation/QC).  
+  数据管线：`src/data_processing/basin_processor.py`（径流加载、格点提取、聚合/质控）。
+- Advanced analysis: `src/analysis/deviation_attribution.py`, `trajectory_jaramillo.py`, `analysis/budyko_ml_workflow.py`.  
+  高阶分析：`src/analysis/deviation_attribution.py`、`trajectory_jaramillo.py`、`analysis/budyko_ml_workflow.py`。
+- Scaling: `src/utils/parallel_processing.py` — safe parallel executor with error capture.  
+  扩展：`src/utils/parallel_processing.py` — 带错误收集的并行执行。
 
-其中，实际蒸发 **EA** 无法直接测量。我们依赖水量平衡方程：
-`EA ≈ P - Q` （长时间尺度，假设ΔS≈0）
+## 🧭 Code Walkthrough Path | 源码阅读路径
+1) Start with `examples/01_real_data_workflow.py` — see end-to-end usage & inputs/outputs.  
+   从 `examples/01_real_data_workflow.py` 入手，整体感受输入输出。
+2) Open `src/data_processing/basin_processor.py` — how runoff (Q) & met data are loaded, QC’d, aggregated.  
+   阅读 `basin_processor.py`，理解径流/气象加载、质控与聚合。
+3) Read `src/models/pet_lai_co2.py` & `pet_models.py` — PET calculation pathways (innovation vs baseline).  
+   查看 `pet_lai_co2.py` 与 `pet_models.py`，区分创新与基线 PET。
+4) Read `src/budyko/water_balance.py` → `src/budyko/curves.py` — compute IA/IE from P,Q,PET then fit ω.  
+   阅读 `water_balance.py`→`curves.py`，理解 IA/IE 计算与 ω 拟合。
+5) Explore `src/budyko/deviation.py` & `trajectory_jaramillo.py` — deviation stats & movement vectors.  
+   探索 `deviation.py` 与 `trajectory_jaramillo.py`，掌握偏差统计与轨迹向量。
+6) Inspect `src/analysis/deviation_attribution.py` & `analysis/budyko_ml_workflow.py` — attribution & Budyko-constrained ML.  
+   查看 `deviation_attribution.py` 与 `analysis/budyko_ml_workflow.py`，了解归因与约束式 ML。
+7) For scale-out, read `src/utils/parallel_processing.py` — how tasks are chunked and validated.  
+   需要扩展时，阅读 `parallel_processing.py`，掌握任务切分与结果校验。
+8) Finally, check `main_budyko_workflow.py` orchestration and `visualization/` for plotting.  
+   最后回到 `main_budyko_workflow.py` 与 `visualization/`，理解调度与可视化。
 
-因此，蒸发指数完全由观测数据决定：
-**`IE = (P - Q) / P`**
+## 🔄 Data Flow | 数据流转
+Runoff/forcing ingestion (`basin_processor`) → PET calc (`pet_lai_co2` / `pet_models`) → Water balance IA/IE (`water_balance`) → Curve fitting & deviation/trajectory (`curves`, `deviation`, `trajectory_jaramillo`) → Attribution/ML (`analysis/*`) → Parallel scaling (`utils/parallel_processing`) → Plots (`visualization/*`) → Outputs `outputs/`, `results/`.  
+数据链路：径流/气象加载 → PET 计算 → IA/IE 水量平衡 → 曲线拟合与偏差/轨迹 → 归因/ML → 并行扩展 → 可视化输出。
 
-```
-水量平衡方程：P - Q = EA + ΔS
-长时间尺度：EA ≈ P - Q （ΔS ≈ 0）
+## 🧭 Real-world Mapping | 业务场景映射
+- `BasinDataProcessor`: ingest/QC runoff & meteorology → “数据基座/观测锚点”。  
+  `BasinDataProcessor`：加载并质控径流和气象，现实中的观测基础。
+- `WaterBalanceCalculator`: computes EA=P-Q and indices → “水量收支核算”。  
+  `WaterBalanceCalculator`：计算实际蒸发与指标，相当于收支表。
+- `BudykoCurves`: ω fitting & theoretical IE → “理论基准线/健康曲线”。  
+  `BudykoCurves`：拟合流域参数，形成理论参照。
+- `PETWithLAICO2`: PET with vegetation & CO2 response → “植被-大气耦合蒸发需求”。  
+  `PETWithLAICO2`：考虑植被与CO2响应的蒸散需求。
+- `DeviationAnalysis` / `DeviationAttribution`: quantify & explain departures → “异常诊断与病因分析”。  
+  `DeviationAnalysis` / `DeviationAttribution`：偏差诊断与驱动归因。
+- `TrajectoryAnalyzer`: movement in Budyko space → “演化轨迹/方向玫瑰”。  
+  `TrajectoryAnalyzer`：捕捉流域响应方向与强度。
+- `ParallelBudykoAnalyzer`: batch 1000s catchments → “大规模批处理引擎”。  
+  `ParallelBudykoAnalyzer`：面向大批量流域的并行执行。
 
-干旱指数：IA = PET / P     （X轴，由气象数据决定）
-蒸发指数：IE = EA / P      （Y轴，由径流数据Q决定！）
-```
-
-### 径流数据的三重角色
-
-1. **"尺子"角色**：衡量流域真实的水分消耗
-   - 理论IE = f(IA, ω)
-   - 实际IE = (P - Q) / P  ← **完全依赖径流观测Q**
-   - 偏差 = 实际IE - 理论IE
-   * `IE_actual = (P - Q) / P` 是我们衡量一切的“现实”。
-   * `偏差 = IE_actual - IE_theory`
-
-2. **"病人"角色**：揭示流域"健康状态"
-   - 径流异常 → 水量平衡偏离 → "诊断"病因
-   - 示例：Q减少 → IE增加 → 可能是灌溉取水
-
-3. **"参照物"角色**：检验理论和方法
-   - 哪种PET方法最好？→ 看哪个最接近Q揭示的真实状态
-   - GRACE数据准确吗？→ 对比P-Q和P-Q-ΔS
-
----
-
-## 项目结构
-
-```
-Budyko-Analysis/
-├── README.md                          # 本文件
-├── 研究思路.md                        # 详细研究思路（中文）
-├── 代码库结构.md                      # 原始结构说明
-│
-├── src/                               # 核心代码模块（SSOT）
-│   ├── budyko/                        # Budyko分析核心
-│   │   ├── curves.py                  # Budyko曲线公式（Fu, 1981）
-│   │   ├── deviation.py               # Ibrahim (2025) 偏差分析
-│   │   ├── trajectory_jaramillo.py    # Jaramillo (2022) 轨迹分析
-│   │   └── water_balance.py           # 水量平衡计算（Q是基石）
-│   │
-│   ├── models/                        # PET模型模块（SSOT）
-│   │   ├── pet_models.py              # 标准PET模型集合
-│   │   └── pet_lai_co2.py             # ★ LAI+CO2 PET模型（核心创新）
-│   │
-│   ├── analysis/                      # 高阶分析模块
-│   │   ├── deviation_attribution.py   # 偏差归因（随机森林）
-│   │   └── snow_analyzer.py           # 积雪影响分析
-│   │
-│   ├── data_processing/               # 数据加载与处理（SSOT）
-│   │   ├── basin_processor.py         # ★ 流域数据处理（Q加载）
-│   │   ├── grace_lai_processor.py     # ★ GRACE & LAI加载器
-│   │   └── cmip6_processor.py         # CMIP6数据处理
-│   │
-│   ├── visualization/                 # 可视化
-│   │   ├── budyko_plots.py            # Budyko空间图
-│   │   └── direction_rose.py          # 方向玫瑰图
-│   │
-│   └── utils/                         # 工具函数
-│       └── parallel_processing.py     # 并行计算（万级流域）
-│
-├── examples/                          # 完整示例（新增）
-│   ├── 01_real_data_workflow.py       # ★ 真实世界综合工作流（推荐）
-│   ├── complex_integrated_analysis.py # 复杂综合分析
-│   └── complete_workflow_example.py   # 完整工作流示例
-│
-├── tests/                             # 测试文件
-│   ├── unit/                          # 单元测试
-│   │   ├── test_pet_models.py
-│   │   ├── test_water_balance.py
-│   │   └── test_deviation.py
-│   └── integration/                   # 集成测试
-│       └── test_full_workflow.py
-│
-├── docs/                              # 文档（新增）
-│   ├── methodology.md                 # 方法论详解
-│   ├── data_requirements.md           # 数据需求说明
-│   ├── api_reference.md               # API文档
-│   └── case_studies.md                # 案例研究
-│
-├── notebooks/                         # Jupyter教程（保留）
-│   └── tutorial.ipynb                 # 交互式教程
-│
-└── scripts/                           # 批处理脚本
-    ├── batch_processing/              # 批量处理
-    └── parallel_analysis.py           # 并行分析
-```
-
----
-
-## 快速开始
-
-### 安装
-
+## 🚀 Quickstart | 快速开始
 ```bash
-# 克隆仓库
 git clone https://github.com/yourusername/Budyko-Analysis.git
 cd Budyko-Analysis
-
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate  # Windows
-
-# 安装依赖
+python -m venv .venv && .\.venv\Scripts\activate  # Windows 示例
 pip install -r requirements.txt
 ```
-
-### 本地运行前的准备
-
-- **依赖安装**：建议使用 `python -m venv venv` 创建虚拟环境，并运行 `pip install -r requirements.txt` 安装全部依赖（含科学计算与绘图库）。
-- **数据下载/解压**：
-  - 默认数据目录为 `data/processed`，输出目录为 `results`（在 `Scripts/run_full_analysis.py` 顶部集中配置）。
-  - 将处理好的 `catchments.csv`（需包含 `id` 列）以及对应的 `<id>.csv` 数据文件放入 `data/processed/`。
-  - 如目录不存在或文件缺失，脚本会提示缺失原因并自动回退到演示数据。
-- **可能的运行时间**：
-  - 使用内置演示数据（单个流域）通常在数秒内完成。
-  - 真实批量数据（数十到数百流域）会因机器性能与文件大小不同，大约需要数分钟至十余分钟，请预留足够时间并确保有充足的磁盘空间。
-
-### 基础示例
-
-```python
-import numpy as np
-import pandas as pd
-from src.budyko.curves import BudykoCurves
-from src.budyko.water_balance import WaterBalanceCalculator
-from src.models.pet_lai_co2 import PETWithLAICO2
-
-# ============ 1. 准备数据 ============
-# 假设你有流域数据
-P = np.array([800, 850, 900])  # 降水 (mm/yr)
-Q = np.array([200, 220, 240])  # 径流 (mm/yr) - 核心数据！
-T = np.array([15, 16, 14])     # 温度 (°C)
-LAI = np.array([3.5, 3.8, 3.2]) # 叶面积指数
-CO2 = np.array([380, 390, 400]) # CO2浓度 (ppm)
-
-# ============ 2. 计算PET（创新方法） ============
-pet_calculator = PETWithLAICO2()
-PET = pet_calculator.calculate(
-    temperature=T,
-    lai=LAI,
-    co2=CO2,
-    # ... 其他气象变量
-)
-
-# ============ 3. 水量平衡计算（径流Q是核心） ============
-wb_calc = WaterBalanceCalculator()
-results = wb_calc.calculate_budyko_indices(
-    P=P,
-    Q=Q,      # 径流观测 - 决定实际蒸发！
-    PET=PET
-)
-
-print("干旱指数 IA:", results['aridity_index'])
-print("蒸发指数 IE:", results['evaporation_index'])
-print("实际蒸发 EA:", results['actual_evaporation'])  # = P - Q
-
-# ============ 4. Budyko曲线拟合 ============
-budyko = BudykoCurves()
-omega, fit_stats = budyko.fit_omega(
-    ia_values=results['aridity_index'],
-    ie_values=results['evaporation_index']
-)
-
-print(f"流域参数 ω: {omega:.2f}")
-print(f"拟合R²: {fit_stats['r2']:.3f}")
-
-# ============ 5. 计算偏差 ============
-ie_theory = budyko.tixeront_fu(results['aridity_index'], omega)
-deviation = results['evaporation_index'] - ie_theory
-
-print("Budyko偏差:", deviation)
-```
-
-### 完整工作流示例
-
-查看 `examples/01_real_data_workflow.py` 获取：
-- 数据加载（CMFD、径流、LAI、CO2）
-- 流域筛选（面积、数据质量）
-- 多种PET方法对比
-- 偏差分析和归因
-- 可视化输出
-
----
-
-## 核心功能
-
-### 1. 水量平衡计算（基于径流Q）
-
-```python
-from src.budyko.water_balance import WaterBalanceCalculator
-
-wb = WaterBalanceCalculator()
-
-# 基础计算：EA = P - Q
-results = wb.calculate_budyko_indices(P, Q, PET)
-
-# 考虑储量变化：EA = P - Q - ΔS
-results_with_storage = wb.calculate_with_storage(P, Q, PET, delta_S)
-```
-
-**关键**：没有径流Q，实际蒸发EA无法确定，Budyko分析无从谈起！
-
-### 2. 多种PET方法（含创新方法）
-
-```python
-from src.models.pet_models import PETModelFactory
-from src.models.pet_lai_co2 import PETWithLAICO2
-
-# 传统方法
-pet_pm = PETModelFactory.create('penman_monteith')
-pet_hs = PETModelFactory.create('hargreaves')
-pet_pt = PETModelFactory.create('priestley_taylor')
-
-# 创新方法：考虑LAI和CO2
-pet_advanced = PETWithLAICO2()
-PET_new = pet_advanced.calculate(
-    temperature=T,
-    humidity=RH,
-    wind_speed=u2,
-    radiation=Rn,
-    lai=LAI,          # MODIS LAI
-    co2=CO2,          # 大气CO2浓度
-    latitude=lat
-)
-```
-
-**创新点**：
-- LAI动态调整表面阻抗
-- CO2浓度影响气孔导度
-- 更准确反映植被-大气相互作用
-
-### 3. Ibrahim偏差分析
-
-```python
-from src.budyko.deviation import DeviationAnalysis
-
-analyzer = DeviationAnalysis(period_length=20)
-
-# 计算时段间偏差（基于径流Q）
-distribution = analyzer.calculate_deviations(
-    ia_i=period1_aridity,
-    ie_obs_i=period1_evaporation,  # 来自Q: (P-Q)/P
-    omega_i=period1_omega,
-    ia_i_plus_1=period2_aridity,
-    ie_obs_i_plus_1=period2_evaporation,  # 来自Q
-    period_pair='Δ1-2'
-)
-
-# Wilcoxon检验
-test_result = analyzer.wilcoxon_test(distribution)
-```
-
-### 4. Jaramillo轨迹分析
-
-```python
-from src.budyko.trajectory_jaramillo import TrajectoryAnalyzer
-
-trajectory = TrajectoryAnalyzer()
-
-# 计算Budyko空间运动（径流Q决定起点和终点）
-movement = trajectory.calculate_movement(
-    catchment_id='basin_001',
-    period_1={'IA': ia1, 'IE': ie1, 'name': '1980-2000'},  # IE来自Q
-    period_2={'IA': ia2, 'IE': ie2, 'name': '2000-2020'}   # IE来自Q
-)
-
-print(f"运动强度: {movement.intensity:.3f}")
-print(f"方向角: {movement.direction_angle:.1f}°")
-print(f"遵循曲线: {movement.follows_curve}")
-```
-
-### 5. 偏差归因分析
-
-```python
-from src.analysis.deviation_attribution import DeviationAttribution
-
-attributor = DeviationAttribution()
-
-# 添加驱动因子
-attributor.add_drivers({
-    'land_use_change': land_use_data,
-    'irrigation': irrigation_data,
-    'reservoir': reservoir_data,
-    'snow_fraction': snow_data
-})
-
-# 归因分析（径流Q揭示的偏差是因变量）
-attribution_results = attributor.attribute_deviation(
-    deviation=budyko_deviation,  # 基于径流Q的偏差
-    method='random_forest'
-)
-
-print("驱动因子重要性:")
-print(attribution_results['importance'])
-```
-
-### 6. 并行处理（万级流域）
-
-```python
-from src.utils.parallel_processing import ParallelBudykoAnalyzer
-
-parallel_analyzer = ParallelBudykoAnalyzer(n_jobs=-1)
-
-# 批量处理6000+流域
-results_all = parallel_analyzer.analyze_catchments(
-    catchment_data=basin_data,
-    pet_method='lai_co2',  # 使用创新PET方法
-    n_catchments=6000
-)
-```
-
----
-
-## 数据需求
-
-### 必需数据
-
-1. **径流数据 (Q)** - **核心！**
-   - 格式：CSV/NetCDF
-   - 字段：date, basin_id, runoff (mm/day 或 mm/month)
-   - 来源：国家水文站网、Caravan数据集
-   - **重要性**：决定实际蒸发EA，是Budyko分析的基石
-
-2. **降水数据 (P)**
-   - CMFD 0.1°格点数据
-   - 时间：1960-2020
-   - 单位：mm/day
-
-3. **气象数据（计算PET）**
-   - 温度、湿度、风速、辐射等
-   - 来源：CMFD数据集
-
-### 可选数据（用于创新分析）
-
-4. **LAI数据**
-   - MODIS MOD15A2H
-   - 用于改进PET计算
-
-5. **CO2浓度数据**
-   - 全球CO2观测（Mauna Loa等）
-   - 用于改进PET计算
-
-6. **GRACE TWS数据**
-   - 用于检验储量变化假设
-   - EA' = P - Q - ΔS
-
-7. **其他驱动因子**
-   - 土地利用、NDVI、水库、灌溉、积雪等
-   - 用于偏差归因分析
-
----
-
-## 方法论概述
-
-### 传统Budyko框架
-
-```
-Budyko假设：
-在长时间尺度上，流域蒸发由供水（P）和需水（PET）共同决定
-
-Fu-Budyko公式：
-IE = 1 + IA - (1 + IA^ω)^(1/ω)
-
-其中：
-- IA = PET/P（干旱指数，X轴）
-- IE = EA/P（蒸发指数，Y轴）
-- EA = P - Q（实际蒸发，由径流Q确定！）
-- ω = 流域特征参数
-```
-
-### Ibrahim偏差分析（2023）
-
-```
-Step 1: 拟合时段i的ω参数
-        使用径流Q计算IE_obs,i = (P-Q)/P
-
-Step 2: 计算时段i+1的偏差
-        ε_IE,ω = IE_obs,i+1 - IE_theory,i+1(ω_i)
-
-Step 3: 拟合偏态正态分布
-        f(ε) ~ SkewNormal(ξ, λ, α)
-
-Step 4: 时间稳定性分类
-        Stable / Variable / Alternating / Shift
-
-Step 5: 边际分布聚合
-```
-
-### Jaramillo轨迹分析（2022）
-
-```
-运动向量：
-v = (ΔIA, ΔIE)
-其中 ΔIE = IE_t2 - IE_t1 （由两个时期的径流Q决定）
-
-运动强度：
-I = |v| = sqrt(ΔIA² + ΔIE²)
-
-运动方向：
-θ = arctan2(ΔIA, ΔIE)
-
-遵循曲线判断：
-45° < θ < 90° 或 225° < θ < 270°
-```
-
-### 创新：LAI+CO2 PET方法
-
-```
-基于Penman-Monteith方程，改进气孔阻抗：
-
-rs = rs_min * f(LAI) * f(CO2)
-
-其中：
-- f(LAI)：叶面积指数影响
-  rs_LAI = rs_ref / max(LAI, 0.5)
-
-- f(CO2)：CO2浓度影响
-  rs_CO2 = 1 + k_co2 * log(CO2/CO2_ref)
-  k_co2 ≈ 0.15-0.25（文献范围）
-```
-
-**物理机制**：
-- LAI增加 → 蒸腾面积增大 → PET增加
-- CO2增加 → 气孔部分关闭 → PET减少（CO2施肥效应）
-
----
-
-## 应用场景
-
-### 场景1：流域筛选
-
-```python
-from src.analysis.basin_screening import BasinScreener
-
-screener = BasinScreener()
-
-# 筛选标准
-selected_basins = screener.select_basins(
-    min_area=100,           # 最小面积 km²
-    max_area=5000,          # 最大面积 km²
-    min_data_years=20,      # 最少20年径流数据
-    human_impact='low',     # 低人类活动影响
-    data_quality='high'     # 高质量径流观测
-)
-
-print(f"筛选出 {len(selected_basins)} 个流域")
-```
-
-### 场景2：雪影响分析
-
-```python
-from src.analysis.snow_analysis import SnowImpactAnalyzer
-
-snow_analyzer = SnowImpactAnalyzer()
-
-# 识别积雪主导流域
-snow_basins = snow_analyzer.identify_snow_basins(
-    temperature_data=T,
-    precipitation_data=P,
-    threshold_temp=0  # 0°C以下视为降雪
-)
-
-# 量化雪对径流的贡献
-snow_contribution = snow_analyzer.quantify_snow_contribution(
-    basins=snow_basins,
-    runoff_data=Q,  # 径流观测
-    method='degree_day'
-)
-```
-
-### 场景3：未来情景预测
-
-```python
-from src.data_processing.cmip6_processor import CMIP6Processor
-
-cmip6 = CMIP6Processor()
-
-# 加载CMIP6数据
-future_climate = cmip6.load_scenario(
-    scenario='ssp585',
-    variables=['pr', 'tas', 'co2'],
-    period='2020-2100'
-)
-
-# 预测未来Budyko关系（使用LAI+CO2 PET）
-future_budyko = budyko_analyzer.project_future(
-    climate_data=future_climate,
-    pet_method='lai_co2',
-    baseline_omega=current_omega
-)
-```
-
----
-
-## 可视化
-
-### Budyko空间图
-
-```python
-from src.visualization.budyko_plots import BudykoPlotter
-
-plotter = BudykoPlotter()
-
-# 绘制Budyko空间
-fig, ax = plotter.plot_budyko_space(
-    aridity_index=IA,
-    evaporation_index=IE,  # 基于径流Q
-    omega=2.6,
-    color_by='deviation',
-    size_by='basin_area'
-)
-
-plotter.add_budyko_curves(ax, omega_range=[1.5, 2.0, 2.5, 3.0])
-plotter.add_water_energy_limits(ax)
-
-plt.savefig('budyko_space.png', dpi=300)
-```
-
-### 轨迹方向玫瑰图
-
-```python
-from src.visualization.direction_rose import DirectionRosePlotter
-
-rose_plotter = DirectionRosePlotter()
-
-# 绘制方向玫瑰图
-fig = rose_plotter.plot_direction_rose(
-    angles=movement_angles,
-    intensities=movement_intensities,
-    n_bins=8,
-    color_by_intensity=True
-)
-
-plt.savefig('trajectory_rose.png', dpi=300)
-```
-
----
-
-## 测试
-
+Run demo 示例:
 ```bash
-# 运行所有测试
-pytest tests/
-
-# 运行特定测试
-pytest tests/unit/test_pet_models.py
-pytest tests/unit/test_water_balance.py
-
-# 运行集成测试
-pytest tests/integration/test_full_workflow.py
-
-# 覆盖率报告
-pytest --cov=src tests/
+python examples/complete_workflow_example.py
 ```
+Outputs go to `outputs/complete_workflow/`.  
+输出保存在 `outputs/complete_workflow/`。
 
----
-
-## 引用
-
-如果你使用本框架，请引用：
-
-### 方法论引用
-
-1. **Ibrahim偏差分析**:
-   ```
-   Ibrahim, B., et al. (2023). On the Need to Update the Water-Energy Balance
-   Framework for Predicting Catchment Runoff. Water Resources Research, 59(1).
-   ```
-
-2. **Jaramillo轨迹分析**:
-   ```
-   Jaramillo, F., et al. (2022). Fewer Basins Will Follow Their Budyko Curves
-   Under Global Warming. Water Resources Research, 58(3).
-   ```
-
-3. **原始Budyko理论**:
-   ```
-   Budyko, M. I. (1974). Climate and Life. Academic Press.
-   Fu, B. P. (1981). On the calculation of the evaporation from land surface.
-   ```
-
-### 数据引用
-
-如果使用Caravan数据集:
+## 🧪 Tests | 测试
+```bash
+pytest tests/ -v
 ```
-Kratzert, F., et al. (2023). Caravan - A global community dataset for
-large-sample hydrology. Scientific Data, 10(1), 61.
-```
+Or target units/integration separately.  
+可分别运行单测或集成测试。
 
----
+## 📚 Reading Order for New Devs | 新同事阅读顺序
+1) `README` (本文件) + `QUICKSTART.md` → high-level intent.  
+   先读 `README` 与 `QUICKSTART.md`，把握全局。
+2) `examples/01_real_data_workflow.py` → concrete usage.  
+   看真实工作流脚本，理解输入输出格式。
+3) `src/data_processing/basin_processor.py` → data/QC contracts.  
+   深入数据契约和质控。
+4) `src/models/pet_lai_co2.py` & `src/budyko/water_balance.py` → PET & IA/IE core.  
+   理解 PET 计算与 IA/IE 生成。
+5) `src/budyko/curves.py`, `src/budyko/deviation.py`, `trajectory_jaramillo.py` → theory/diagnostics.  
+   研读曲线、偏差、轨迹。
+6) `src/analysis/deviation_attribution.py`, `analysis/budyko_ml_workflow.py` → attribution/ML.  
+   了解归因与 ML 扩展。
+7) `src/utils/parallel_processing.py` → scaling patterns.  
+   熟悉并行模式与错误处理。
 
-## 常见问题
+## 🛠️ Common Entry Points | 常用入口
+- Minimal PET+WB:
+  ```python
+  from src.models.pet_lai_co2 import PETWithLAICO2
+  from src.budyko.water_balance import WaterBalanceCalculator
+  pet = PETWithLAICO2().calculate(temperature=T, humidity=RH, wind_speed=U2, radiation=Rn, lai=LAI, co2=CO2)  # mm/day
+  wb = WaterBalanceCalculator().calculate_budyko_indices(P=P, Q=Q, PET=pet * 365)
+  ```
+  最小示例：计算 PET，再用径流 Q 得到 IA/IE。
+- Parallel batch:
+  ```python
+  from src.utils.parallel_processing import ParallelBudykoAnalyzer
+  analyzer = ParallelBudykoAnalyzer(n_processes=8)
+  df = analyzer.process_catchments(catchment_ids, analysis_function=my_fn, data_loader=my_loader)
+  ```
+  并行处理多流域，捕获失败详情。
 
-### Q1: 为什么强调径流数据Q如此重要？
+## 📈 Performance Tips | 性能提示
+- Use array/vectorized PET (`pet_lai_co2.py`) and avoid per-year Python loops.  
+  使用向量化 PET，避免逐年循环。
+- Set `n_processes` wisely (CPU-1) and moderate `chunk_size`.  
+  `n_processes` 设为 CPU-1，`chunk_size` 适度。
+- Warm-start ω with climate-based guess (`fit_omega` smart_guess).  
+  利用 `fit_omega` 的智能初值减少迭代。
 
-**A**: 因为在Budyko框架中，实际蒸发EA无法直接测量，只能通过水量平衡方程间接计算：
-```
-EA = P - Q - ΔS ≈ P - Q （长时间尺度）
-```
-没有径流Q，我们就无法得到蒸发指数IE = EA/P，整个Budyko分析无法进行。**Q是连接理论与现实的唯一桥梁**。
+## 📦 Data Requirements | 数据要求
+- Mandatory: runoff Q (mm/day or mm/month), precipitation P, meteorological drivers for PET.  
+  必需：径流 Q、降水 P、气象驱动（温湿风辐射）用于 PET。
+- Optional: LAI (MODIS), CO2, GRACE TWS, land-use/irrigation/reservoir drivers for attribution.  
+  可选：LAI、CO2、GRACE TWS 及土地利用/灌溉/水库等归因因子。
+- Default folders: place processed inputs under `data/processed/`, outputs under `results/` or `outputs/`.  
+  默认目录：输入放 `data/processed/`，输出在 `results/` 或 `outputs/`。
 
-### Q2: LAI+CO2 PET方法的优势是什么？
+## 🤝 Contribution | 贡献
+- Fork → feature branch → tests/docs → PR.  
+  Fork → 新分支 → 补充测试/文档 → 提 PR。
+- Style: PEP8, docstrings, add/extend tests under `tests/`.  
+  规范：PEP8、完善注释，补充 `tests/`。
 
-**A**: 传统PET方法将植被作为静态参数，忽略了：
-- 植被动态变化（LAI季节性、年际变化）
-- CO2浓度上升导致的气孔响应
-我们的方法动态考虑这两个因素，更准确反映变化环境下的蒸发需求。
+## 📜 License | 许可证
+MIT License, see `LICENSE`.  
+MIT 许可证，详见 `LICENSE`。
 
-### Q3: 如何选择合适的流域？
+## 📬 Contact | 联系方式
+- Issues on GitHub; email placeholder `your.email@example.com`.  
+- GitHub Issues；邮件 `your.email@example.com`。
 
-**A**: 建议标准：
-- 面积：100-5000 km²（避免太小或太大）
-- 数据：至少20年高质量径流观测
-- 人类影响：尽量选择自然流域
-- 地形：避免极端地形（如高山冰川）
-
-### Q4: 多长的时间尺度合适？
-
-**A**:
-- 年尺度：最常用，消除季节波动
-- 20年窗口：Ibrahim方法推荐，平滑年际变率
-- 季节尺度：用于湿季/干季对比
-
-### Q5: 如何处理缺失数据？
-
-**A**:
-- 径流Q：严格质控，缺失>10%的年份剔除
-- 气象数据：可用临近站点插值
-- LAI：可用气候态平均值填充
-
----
-
-## 贡献指南
-
-欢迎贡献！请遵循：
-
-1. Fork本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启Pull Request
-
-### 代码规范
-
-- 遵循PEP 8
-- 添加docstring（Google风格）
-- 编写单元测试
-- 更新文档
-
----
-
-## 许可证
-
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
----
-
-## 联系方式
-
-- Issues: [GitHub Issues](https://github.com/yourusername/Budyko-Analysis/issues)
-- Email: your.email@example.com
-
----
-
-## 致谢
-
-- 感谢Ibrahim et al. (2023)和Jaramillo et al. (2022)的开创性工作
-- 感谢CMFD、Caravan、MODIS团队提供高质量数据
-- 感谢所有贡献者
-
----
-
-## 更新日志
-
-### v1.0.0 (2025-10-31)
-- 初始版本发布
-- 实现Ibrahim偏差分析
-- 实现Jaramillo轨迹分析
-- **创新：LAI+CO2 PET方法**
-- 完整示例和文档
-
----
-
-## 循序渐进的小练习
-
-1. **参数敏感性测试（5分钟）**
-   - 在 `examples/01_real_data_workflow.py` 中，将 `PETWithLAICO2` 的叶面积指数（`lai`）输入统一调高 10%。
-   - 重新运行示例，记录干旱指数 IA、蒸发指数 IE 的变化幅度。
-   - 思考：LAI 增大如何影响 PET？结果是否符合预期？
-
-2. **替换数据子集（10 分钟）**
-   - 选择 5 个流域，将 `runoff` 数据替换为同区域不同年份的子集（保持气象数据不变）。
-   - 比较替换前后的偏差分布，观察哪些流域对年份敏感。
-   - 思考：径流年代际变化对偏差稳定性有何影响？
-
-3. **多种 PET 方法对比（15 分钟）**
-   - 在同一流域上，分别使用 `penman_monteith`、`hargreaves` 和 `PETWithLAICO2` 计算 PET。
-   - 记录 IE、偏差 ε 以及 `omega` 拟合结果，整理成表格。
-   - 思考：哪种方法最贴近观测径流？差异来源是什么？
-
-4. **雪区与非雪区对照实验（20 分钟）**
-   - 使用 `SnowImpactAnalyzer` 挑选 3 个积雪主导流域与 3 个非雪流域。
-   - 对比两类流域的 Budyko 轨迹和偏差变化，特别关注融雪期。
-   - 思考：积雪贡献在不同气候区的角色有何差异？
-
-5. **并行计算性能调优（可选，20 分钟）**
-   - 在 `ParallelBudykoAnalyzer` 中调整 `n_jobs`（如 -1、4、8），批量处理相同数量的流域。
-   - 记录运行时间与内存占用，绘制简单对比图。
-   - 思考：并行度与 I/O、CPU 之间的平衡点在哪里？
-
----
-
-## 自检清单
-
-- [ ] 我能解释 **径流 Q 在 Budyko 框架中的核心作用**，并据此计算 IE 与偏差。
-- [ ] 我能在示例脚本中 **替换数据子集或调整关键参数**，并解释结果差异的水文意义。
-- [ ] 我能 **切换多种 PET 方法**，比较其对 IE、偏差和 `omega` 拟合的影响。
-- [ ] 我能使用 **SnowImpactAnalyzer** 分析积雪对水量平衡的贡献，并与非雪流域对照。
-- [ ] 我能配置 **ParallelBudykoAnalyzer** 以提高批处理效率，理解 `n_jobs` 对性能的影响。
+## ✅ Newcomer Checklist | 新人自查
+- [ ] Can load runoff (Q) + PET to compute IA/IE via `water_balance`.  
+  [ ] 能用径流与 PET 计算 IA/IE。
+- [ ] Can fit ω and quantify deviation/trajectory for two periods.  
+  [ ] 会拟合 ω 并计算时段偏差/轨迹。
+- [ ] Can swap PET methods (baseline vs LAI+CO2) and compare IE/ε.  
+  [ ] 会切换 PET 方法并比较 IE/偏差。
+- [ ] Can run `examples/01_real_data_workflow.py` and read outputs in `outputs/`.  
+  [ ] 能运行示例并查看输出。
+- [ ] Know how to batch with `ParallelBudykoAnalyzer` for many catchments.  
+  [ ] 掌握并行批处理用法。
 
 ---
 
